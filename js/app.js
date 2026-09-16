@@ -271,6 +271,8 @@
     'Desmarcar todos': 'Deselect all',
     'Mostrar todos os {n}': 'Show all {n}',
     'Texto do item': 'Item text',
+    'Detalhe': 'Detail',
+    '(instituição, papel…)': '(institution, role…)',
     '(opcional: página do artigo, PDF, vídeo…)': '(optional: article page, PDF, video…)',
     'Salvar': 'Save',
     'Cancelar': 'Cancel',
@@ -418,12 +420,18 @@
           const antes = anteriores.get(it.id);
           if (antes) {
             if (antes.destaque) destaques++;
-            return Object.assign({}, it, {
+            const guardado = {
               titulo: antes.titulo, link: antes.link || it.link, manter: antes.manter, destaque: antes.destaque,
               dTitulo: antes.dTitulo, dVeiculo: antes.dVeiculo, dTexto: antes.dTexto, ordem: antes.ordem,
               // o que a pessoa escreveu em inglês também fica
               tituloEn: antes.tituloEn, detalheEn: antes.detalheEn, descricaoEn: antes.descricaoEn, dTextoEn: antes.dTextoEn,
-            });
+            };
+            // O detalhe e a descrição só ficam se a pessoa os editou aqui (marca gravada ao salvar o
+            // lápis). Sem edição, vale o Lattes: a descrição não entra no código do item, então uma
+            // descrição atualizada no currículo chega por aqui.
+            if (antes.detalheEditado) Object.assign(guardado, { detalhe: antes.detalhe, detalheEditado: true });
+            if (antes.descricaoEditada) Object.assign(guardado, { descricao: antes.descricao, descricaoEditada: true });
+            return Object.assign({}, it, guardado);
           }
           if (ocultos.has(it.id)) return Object.assign({}, it, { manter: false, destaque: false });
           // As produções que o autor marcou como relevantes no Lattes já vêm como destaque.
@@ -740,6 +748,15 @@
       let y = 0;
       iframe.contentDocument.addEventListener('click', () => { y = window.scrollY; }, true);
       iframe.contentWindow.addEventListener('hashchange', () => window.scrollTo(window.scrollX, y));
+      // O botão PT/EN do próprio site não funciona na prévia (iframe sem scripts): o construtor
+      // faz o papel dele, junto do botão "Ver em inglês" da barra.
+      iframe.contentDocument.addEventListener('click', e => {
+        const b = e.target.closest('.idioma-site button');
+        if (!b) return;
+        ui.idiomaPrevia = b.dataset.idioma === 'en' ? 'en' : 'pt';
+        atualizarCores();
+        atualizarBotaoTema();
+      });
     };
     iframe.src = urlPrevia;
     ajustar();
@@ -1192,6 +1209,10 @@
   // por exemplo). Só o que está no site: as produções não escolhidas voltam reimportando o Lattes.
   function dadosParaReabrir() {
     const p = estado.perfil;
+    // Só os códigos do que a pessoa tirou do site, para continuar de fora ao reimportar o Lattes.
+    // Num site reaberto sem reimportar, os itens tirados antes não estão em `secoes`: vêm de `ocultos`.
+    const ocultos = new Set(estado.ocultos || []);
+    for (const s of estado.secoes) for (const i of s.itens) if (!i.manter) ocultos.add(i.id);
     return {
       construtor: 'site-pessoal',
       versao: 1,
@@ -1205,8 +1226,7 @@
       secoes: estado.secoes
         .map(s => ({ id: s.id, titulo: s.titulo, tipo: s.tipo, itens: s.itens.filter(i => i.manter) }))
         .filter(s => s.itens.length),
-      // Só os códigos do que a pessoa tirou do site, para continuar de fora ao reimportar o Lattes.
-      ocultos: estado.secoes.flatMap(s => s.itens.filter(i => !i.manter).map(i => i.id)),
+      ocultos: [...ocultos],
     };
   }
 
@@ -1554,6 +1574,11 @@
     const conteudo = editando ? `
       <div class="editor">
         <textarea data-editor="${chave}" rows="3" aria-label="${esc(_('Texto do item'))}">${esc(it.titulo)}</textarea>
+        ${it.detalhe && !it.integrantes && s.tipo !== 'producao' ? `
+        <label class="editor-link">
+          <span>${_('Detalhe')} <em>${_('(instituição, papel…)')}</em></span>
+          <input data-editor-detalhe="${chave}" value="${esc(it.detalhe)}">
+        </label>` : ''}
         ${'descricao' in it || /^(Projetos|OutrosProjetos|LinhaPesquisa)/.test(s.id || '') ? `
         <label class="editor-link">
           <span>${_('Descrição')} <em>${_('(pode encurtar ou apagar; o site mostra o texto inteiro)')}</em></span>
@@ -1938,8 +1963,19 @@
     const texto = ta ? ta.value.replace(/\s+/g, ' ').trim() : '';
     if (texto) it.titulo = texto;
     if (campoLink) it.link = campoLink.value.trim();
+    // Detalhe e descrição: a marca "editado" faz a edição sobreviver à reimportação do Lattes.
+    const campoDetalhe = app.querySelector(`[data-editor-detalhe="${si}:${ii}"]`);
+    if (campoDetalhe) {
+      const v = campoDetalhe.value.replace(/\s+/g, ' ').trim();
+      if (v !== (it.detalhe || '')) it.detalheEditado = true;
+      it.detalhe = v;
+    }
     const campoDescricao = app.querySelector(`[data-editor-descricao="${si}:${ii}"]`);
-    if (campoDescricao) it.descricao = campoDescricao.value.replace(/\s+/g, ' ').trim();
+    if (campoDescricao) {
+      const v = campoDescricao.value.replace(/\s+/g, ' ').trim();
+      if (v !== (it.descricao || '')) it.descricaoEditada = true;
+      it.descricao = v;
+    }
     // Os campos em inglês (tituloEn, detalheEn, descricaoEn), quando o site sai em inglês.
     app.querySelectorAll(`[data-editor-campo][data-item="${si}:${ii}"]`).forEach(c => {
       it[c.dataset.editorCampo] = c.value.replace(/\s+/g, ' ').trim();
@@ -1961,9 +1997,9 @@
       mudarLargura(ui.largura + passo);
       return;
     }
-    const campo = e.target.closest('[data-editor], [data-editor-link], [data-editor-descricao], [data-editor-campo]');
+    const campo = e.target.closest('[data-editor], [data-editor-link], [data-editor-detalhe], [data-editor-descricao], [data-editor-campo]');
     if (!campo) return;
-    const [si, ii] = (campo.dataset.editor || campo.dataset.editorLink || campo.dataset.editorDescricao || campo.dataset.item).split(':').map(Number);
+    const [si, ii] = (campo.dataset.editor || campo.dataset.editorLink || campo.dataset.editorDetalhe || campo.dataset.editorDescricao || campo.dataset.item).split(':').map(Number);
     const descricao = campo.dataset.editorDescricao || campo.dataset.editorCampo === 'descricaoEn'; // texto longo: Enter quebra linha
     if (e.key === 'Enter' && !e.shiftKey && !descricao) { e.preventDefault(); salvarEdicao(si, ii); }
     if (e.key === 'Escape') { ui.editando = null; trocarItem(si, ii); }
