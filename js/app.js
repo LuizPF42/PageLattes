@@ -364,7 +364,51 @@
       avisos: [],
       publicacao: { usuario: '' },
       reaberto: false, // veio de um index.html já publicado: na hora de publicar, é substituir o arquivo
+      // Num site reaberto, o index.html só traz o que estava publicado: `ocultos` são os códigos do que
+      // ficou de fora, `edicoesOcultas` o que a pessoa tinha escrito nesses itens, e `parcial` diz que as
+      // demais produções ainda não vieram (voltam ao reimportar o Lattes).
+      ocultos: [],
+      edicoesOcultas: {},
+      parcial: false,
+      versaoArquivo: 0,
     };
+  }
+
+  // Campos do lápis que a pessoa pode editar. Na primeira edição, a versão do Lattes fica guardada em
+  // `<campo>Original`: assim dá para saber o que foi editado aqui (e mantê-lo ao reimportar) e o que
+  // mudou no currículo (e deixar entrar), e para voltar ao texto do Lattes.
+  const EDITAVEIS = ['titulo', 'detalhe', 'descricao', 'link'];
+
+  function editado(it, campo) {
+    return it[campo + 'Original'] != null && (it[campo] || '') !== (it[campo + 'Original'] || '');
+  }
+
+  // Grava um valor vindo do lápis, guardando o original na primeira mudança e esquecendo-o se a
+  // pessoa voltou ao texto do Lattes.
+  function gravarCampo(it, campo, valor) {
+    if (valor === (it[campo] || '')) return;
+    if (it[campo + 'Original'] == null) it[campo + 'Original'] = it[campo] || '';
+    it[campo] = valor;
+    if (!editado(it, campo)) delete it[campo + 'Original'];
+  }
+
+  // O que a pessoa escreveu num item: edições em português e os campos em inglês. null se nada.
+  // É o que vai no index.html para os itens tirados do site (que não vão inteiros).
+  function edicoesDe(it) {
+    const e = {};
+    for (const c of EDITAVEIS) if (editado(it, c)) e[c] = it[c];
+    for (const c of ['tituloEn', 'detalheEn', 'descricaoEn']) if (it[c]) e[c] = it[c];
+    return Object.keys(e).length ? e : null;
+  }
+
+  // Aplica edições guardadas a um item recém-lido do Lattes, guardando o texto do Lattes como original.
+  function comEdicoes(it, edicoes) {
+    const t = Object.assign({}, it);
+    for (const [c, v] of Object.entries(edicoes || {})) {
+      if (EDITAVEIS.includes(c)) t[c + 'Original'] = it[c] || '';
+      t[c] = v;
+    }
+    return t;
   }
 
   function carregar() {
@@ -407,17 +451,40 @@
 
   // Importar de novo (currículo atualizado) mantém o que a pessoa já decidiu e editou.
   function aplicarLattes(dados) {
+    // Os itens de antes, pelo código (seção, período, título e detalhe do Lattes) e, para quando o
+    // período mudou ("2020 - Atual" virou "2020 - 2025"), pelo texto sem o período, quando é único.
     const anteriores = new Map();
-    for (const s of estado.secoes) for (const it of s.itens) anteriores.set(it.id, it);
+    const porTexto = new Map();
+    const chaveTexto = (sid, it) => [sid, it.tituloOriginal != null ? it.tituloOriginal : it.titulo, it.detalheOriginal != null ? it.detalheOriginal : it.detalhe].join('|');
+    for (const s of estado.secoes) for (const it of s.itens) {
+      anteriores.set(it.id, it);
+      const k = chaveTexto(s.id, it);
+      porTexto.set(k, porTexto.has(k) ? null : it); // null: repetido, não serve para casar
+    }
+    // O casamento pelo texto só vale para um item de antes que sumiu do Lattes (senão um item novo de
+    // texto igual, uma banca repetida em outro ano, herdaria as escolhas do antigo), e uma vez só.
+    const idsNovos = new Set(dados.secoes.flatMap(s => s.itens.map(it => it.id)));
+    const peloTexto = (sid, it) => {
+      const antes = porTexto.get(chaveTexto(sid, it));
+      if (!antes || idsNovos.has(antes.id)) return null;
+      porTexto.set(chaveTexto(sid, it), null);
+      return antes;
+    };
     const reimportacao = anteriores.size > 0;
     const ocultos = new Set(estado.ocultos || []); // tirados do site antes de reabrir um index.html
+    const edicoesOcultas = estado.edicoesOcultas || {};
+    // Site reaberto de um index.html feito antes de a lista de ocultos ser guardada por inteiro
+    // (versão 1 do arquivo): um item que já existia quando o site foi publicado e não estava nele
+    // ficou de fora por escolha, e continua de fora. O que é de depois entra pela regra normal.
+    const anoPublicado = estado.parcial && estado.versaoArquivo < 2 && estado.fonte
+      ? Number((String(estado.fonte.atualizadoEm || '').match(/\d{4}/) || [])[0]) : 0;
 
     let destaques = 0;
     const secoes = dados.secoes.map(s => {
       const ligada = s.tipo === 'producao' ? PRODUCOES_LIGADAS.test(s.titulo) : SECOES_LIGADAS.test(s.id);
       return Object.assign({}, s, {
         itens: s.itens.map(it => {
-          const antes = anteriores.get(it.id);
+          const antes = anteriores.get(it.id) || peloTexto(s.id, it);
           if (antes) {
             if (antes.destaque) destaques++;
             const guardado = {
@@ -426,14 +493,15 @@
               // o que a pessoa escreveu em inglês também fica
               tituloEn: antes.tituloEn, detalheEn: antes.detalheEn, descricaoEn: antes.descricaoEn, dTextoEn: antes.dTextoEn,
             };
-            // O detalhe e a descrição só ficam se a pessoa os editou aqui (marca gravada ao salvar o
-            // lápis). Sem edição, vale o Lattes: a descrição não entra no código do item, então uma
-            // descrição atualizada no currículo chega por aqui.
-            if (antes.detalheEditado) Object.assign(guardado, { detalhe: antes.detalhe, detalheEditado: true });
-            if (antes.descricaoEditada) Object.assign(guardado, { descricao: antes.descricao, descricaoEditada: true });
+            // O que foi editado aqui fica, e o texto do Lattes de agora passa a ser o original (é para
+            // ele que "Voltar ao texto do Lattes" leva). O que não foi editado vem do Lattes: a descrição
+            // não entra no código do item, então uma descrição atualizada no currículo chega por aqui.
+            for (const c of EDITAVEIS) if (editado(antes, c)) { guardado[c] = antes[c]; guardado[c + 'Original'] = it[c] || ''; }
             return Object.assign({}, it, guardado);
           }
-          if (ocultos.has(it.id)) return Object.assign({}, it, { manter: false, destaque: false });
+          if (ocultos.has(it.id)) return Object.assign(comEdicoes(it, edicoesOcultas[it.id]), { manter: false, destaque: false });
+          const ano = Number((String(it.periodo || '').match(/\d{4}/) || [])[0]);
+          if (anoPublicado && ano && ano < anoPublicado) return Object.assign({}, it, { manter: false, destaque: false });
           // As produções que o autor marcou como relevantes no Lattes já vêm como destaque.
           const destaque = !reimportacao && s.tipo === 'producao' && it.relevante && destaques < MAX_DESTAQUES;
           if (destaque) destaques++;
@@ -464,6 +532,8 @@
       }),
       secoes,
       ocultos: [], // já aplicados: agora todas as produções estão no estado
+      edicoesOcultas: {},
+      parcial: false,
       avisos: dados.avisos,
     });
   }
@@ -1209,13 +1279,23 @@
   // por exemplo). Só o que está no site: as produções não escolhidas voltam reimportando o Lattes.
   function dadosParaReabrir() {
     const p = estado.perfil;
-    // Só os códigos do que a pessoa tirou do site, para continuar de fora ao reimportar o Lattes.
-    // Num site reaberto sem reimportar, os itens tirados antes não estão em `secoes`: vêm de `ocultos`.
+    // Só os códigos do que a pessoa tirou do site (e o que ela tinha escrito nesses itens), para
+    // continuar de fora, com as edições, ao reimportar o Lattes. Num site reaberto sem reimportar,
+    // os itens tirados antes não estão em `secoes`: vêm de `ocultos` e `edicoesOcultas`.
     const ocultos = new Set(estado.ocultos || []);
-    for (const s of estado.secoes) for (const i of s.itens) if (!i.manter) ocultos.add(i.id);
+    const edicoesOcultas = Object.assign({}, estado.edicoesOcultas);
+    for (const s of estado.secoes) for (const i of s.itens) {
+      if (i.manter) continue;
+      ocultos.add(i.id);
+      const e = edicoesDe(i);
+      if (e) edicoesOcultas[i.id] = e;
+      else delete edicoesOcultas[i.id];
+    }
     return {
       construtor: 'site-pessoal',
-      versao: 1,
+      // 2: a lista de ocultos é completa. A versão 1 a perdia ao reabrir sem reimportar; um site que
+      // veio de um arquivo assim e ainda não reimportou o Lattes continua com a lista incompleta.
+      versao: estado.parcial && estado.versaoArquivo < 2 ? 1 : 2,
       aparencia: estado.aparencia,
       fonte: estado.fonte,
       perfil: {
@@ -1227,6 +1307,7 @@
         .map(s => ({ id: s.id, titulo: s.titulo, tipo: s.tipo, itens: s.itens.filter(i => i.manter) }))
         .filter(s => s.itens.length),
       ocultos: [...ocultos],
+      edicoesOcultas,
     };
   }
 
@@ -1316,6 +1397,9 @@
       }),
       secoes: (completarProducoes(dados.secoes), dados.secoes),
       ocultos: Array.isArray(dados.ocultos) ? dados.ocultos.map(String) : [],
+      edicoesOcultas: dados.edicoesOcultas && typeof dados.edicoesOcultas === 'object' ? dados.edicoesOcultas : {},
+      parcial: !!dados.fonte, // as produções fora do site voltam ao reimportar o Lattes
+      versaoArquivo: Number(dados.versao) || 1,
       publicacao: Object.assign(base.publicacao, dados.publicacao),
       reaberto: true,
       // Guardado em português; a tela traduz na hora de mostrar.
@@ -1574,10 +1658,10 @@
     const conteudo = editando ? `
       <div class="editor">
         <textarea data-editor="${chave}" rows="3" aria-label="${esc(_('Texto do item'))}">${esc(it.titulo)}</textarea>
-        ${it.detalhe && !it.integrantes && s.tipo !== 'producao' ? `
+        ${!it.integrantes && s.tipo !== 'producao' ? `
         <label class="editor-link">
           <span>${_('Detalhe')} <em>${_('(instituição, papel…)')}</em></span>
-          <input data-editor-detalhe="${chave}" value="${esc(it.detalhe)}">
+          <input data-editor-detalhe="${chave}" value="${esc(it.detalhe || '')}">
         </label>` : ''}
         ${'descricao' in it || /^(Projetos|OutrosProjetos|LinhaPesquisa)/.test(s.id || '') ? `
         <label class="editor-link">
@@ -1592,6 +1676,7 @@
         <span class="editor-acoes">
           <button type="button" class="botao pequeno" data-acao="salvar-edicao" data-item="${chave}">${_('Salvar')}</button>
           <button type="button" class="link" data-acao="cancelar-edicao" data-item="${chave}">${_('Cancelar')}</button>
+          ${EDITAVEIS.some(c => editado(it, c)) ? `<button type="button" class="link" data-acao="restaurar-item" data-item="${chave}">${_('Voltar ao texto do Lattes')}</button>` : ''}
         </span>
       </div>` : `
       <div class="coluna-texto">
@@ -1634,7 +1719,7 @@
         <div class="editor-en">
           <span>${_('Em inglês (opcional: vazio, fica em português)')}</span>
           <textarea data-editor-campo="tituloEn" data-item="${chave}" rows="2" lang="en" aria-label="${esc(_('Texto do item em inglês'))}" placeholder="${esc(_('Texto do item em inglês'))}">${esc(it.tituloEn || '')}</textarea>
-          ${it.detalhe && !it.integrantes ? `<input data-editor-campo="detalheEn" data-item="${chave}" value="${esc(it.detalheEn || '')}" lang="en" aria-label="${esc(_('Detalhe em inglês (instituição, papel…)'))}" placeholder="${esc(_('Detalhe em inglês (instituição, papel…)'))}">` : ''}
+          ${!it.integrantes ? `<input data-editor-campo="detalheEn" data-item="${chave}" value="${esc(it.detalheEn || '')}" lang="en" aria-label="${esc(_('Detalhe em inglês (instituição, papel…)'))}" placeholder="${esc(_('Detalhe em inglês (instituição, papel…)'))}">` : ''}
           ${temDescricao ? `<textarea data-editor-campo="descricaoEn" data-item="${chave}" rows="4" lang="en" aria-label="${esc(_('Descrição em inglês'))}" placeholder="${esc(_('Descrição em inglês'))}">${esc(it.descricaoEn || '')}</textarea>` : ''}
           ${regra ? `<p class="dica">${_('Se ficar vazio, o site mostra: {texto}', { texto: `<em lang="en">${esc(regra)}</em>` })}</p>` : ''}
         </div>`;
@@ -1953,6 +2038,18 @@
         ui.editando = null;
         trocarItem(si, ii);
         break;
+
+      case 'restaurar-item': {
+        // Volta os campos do lápis ao texto do Lattes; vale ao salvar.
+        const it = estado.secoes[si].itens[ii];
+        const seletor = { titulo: 'data-editor', detalhe: 'data-editor-detalhe', descricao: 'data-editor-descricao', link: 'data-editor-link' };
+        for (const c of EDITAVEIS) {
+          const campo = app.querySelector(`[${seletor[c]}="${si}:${ii}"]`);
+          if (campo && it[c + 'Original'] != null) campo.value = it[c + 'Original'];
+        }
+        b.hidden = true;
+        break;
+      }
     }
   });
 
@@ -1961,21 +2058,13 @@
     const ta = app.querySelector(`[data-editor="${si}:${ii}"]`);
     const campoLink = app.querySelector(`[data-editor-link="${si}:${ii}"]`);
     const texto = ta ? ta.value.replace(/\s+/g, ' ').trim() : '';
-    if (texto) it.titulo = texto;
-    if (campoLink) it.link = campoLink.value.trim();
-    // Detalhe e descrição: a marca "editado" faz a edição sobreviver à reimportação do Lattes.
+    if (texto) gravarCampo(it, 'titulo', texto);
+    if (campoLink) gravarCampo(it, 'link', campoLink.value.trim());
+    // Detalhe e descrição em português; o original do Lattes fica guardado para a reimportação.
     const campoDetalhe = app.querySelector(`[data-editor-detalhe="${si}:${ii}"]`);
-    if (campoDetalhe) {
-      const v = campoDetalhe.value.replace(/\s+/g, ' ').trim();
-      if (v !== (it.detalhe || '')) it.detalheEditado = true;
-      it.detalhe = v;
-    }
+    if (campoDetalhe) gravarCampo(it, 'detalhe', campoDetalhe.value.replace(/\s+/g, ' ').trim());
     const campoDescricao = app.querySelector(`[data-editor-descricao="${si}:${ii}"]`);
-    if (campoDescricao) {
-      const v = campoDescricao.value.replace(/\s+/g, ' ').trim();
-      if (v !== (it.descricao || '')) it.descricaoEditada = true;
-      it.descricao = v;
-    }
+    if (campoDescricao) gravarCampo(it, 'descricao', campoDescricao.value.replace(/\s+/g, ' ').trim());
     // Os campos em inglês (tituloEn, detalheEn, descricaoEn), quando o site sai em inglês.
     app.querySelectorAll(`[data-editor-campo][data-item="${si}:${ii}"]`).forEach(c => {
       it[c.dataset.editorCampo] = c.value.replace(/\s+/g, ' ').trim();
@@ -2100,7 +2189,9 @@
     if (t.dataset.destaqueCampo) {
       const [si, ii] = t.closest('[data-destaque]').dataset.destaque.split(':').map(Number);
       const campo = t.dataset.destaqueCampo;
-      estado.secoes[si].itens[ii][campo] = /^(link|periodo|categoria|categoriaEn)$/.test(campo) ? t.value.trim() : t.value;
+      const valor = /^(link|periodo|categoria|categoriaEn)$/.test(campo) ? t.value.trim() : t.value;
+      if (campo === 'link') gravarCampo(estado.secoes[si].itens[ii], 'link', valor); // guarda o link do Lattes como original
+      else estado.secoes[si].itens[ii][campo] = valor;
       salvar();
       if (campo === 'link') trocarItem(si, ii); // o link também aparece na lista
       return;
