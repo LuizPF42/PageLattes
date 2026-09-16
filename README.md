@@ -160,6 +160,20 @@ node gerar.js
 
 As fontes em `fonts/` são distribuídas sob a SIL Open Font License; os textos das licenças estão na mesma pasta.
 
+### Melhorias a serem implementadas
+
+Hoje nem o site do construtor nem o site gerado fazem nada de especial para o Google encontrá-los: sem `robots.txt`, sem `sitemap.xml`, sem dado estruturado, e o card que aparece ao compartilhar um link não tem imagem. A lista completa, com o que já foi descartado e por quê, está em [`TODO.md`](TODO.md). Resumo:
+
+- `og:image` com foto do perfil (ou uma imagem padrão, quando não houver foto) no site gerado.
+- `<link rel="canonical">` no site gerado.
+- Dado estruturado JSON-LD (`schema.org/Person`) no site gerado.
+- Produções com link direto para o DOI, quando o Lattes trouxer um.
+- Botão de "copiar citação" em ABNT nas produções.
+- Produções agrupadas por ano.
+- `robots.txt` simples no site do construtor.
+
+Parte dessas ideias veio da inspeção do tema Jekyll [al-folio](https://github.com/alshedivat/al-folio) e de sua aplicação em <https://github.com/bdcdo/bdcdo.github.io>.
+
 ## Autoria
 
 Idealizado por [Luiz Cláudio Pimenta Filho](https://github.com/LuizPF42) e escrito com o [Claude Code](https://claude.com/claude-code), da Anthropic.
