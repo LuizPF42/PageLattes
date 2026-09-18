@@ -211,6 +211,10 @@
     'Aparecem em cartões no topo do site, nesta ordem. O título e onde saiu vêm do Lattes: ajuste se precisar e escreva uma frase sobre cada um, dizendo do que trata, o que mostra ou por que importa.':
       'They appear as cards at the top of the site, in this order. The title and where it was published come from Lattes: adjust if needed and write a sentence about each one, saying what it is about, what it shows or why it matters.',
     'Nenhum destaque ainda. Marque com ★ até {max} produções nas listas abaixo.': 'No highlights yet. Mark up to {max} works with ★ in the lists below.',
+    'Um destaque saiu: não achei no currículo novo a produção {titulos}. Ela pode ter saído do Lattes ou ter mudado de registro. Se ainda estiver lá, marque-a de novo com ★ nas listas abaixo.':
+      'One highlight is gone: I did not find the work {titulos} in the new curriculum. It may have left Lattes or had its record changed. If it is still there, mark it again with ★ in the lists below.',
+    'Saíram {n} destaques: não achei no currículo novo as produções {titulos}. Elas podem ter saído do Lattes ou ter mudado de registro. Se ainda estiverem lá, marque-as de novo com ★ nas listas abaixo.':
+      '{n} highlights are gone: I did not find the works {titulos} in the new curriculum. They may have left Lattes or had their records changed. If they are still there, mark them again with ★ in the lists below.',
     'Algo que não está no Lattes? Um software, um site, um projeto, um prêmio.': 'Something that is not in Lattes? A piece of software, a website, a project, an award.',
     '+ Adicionar destaque livre': '+ Add a custom highlight',
     // site em inglês: sem tradução automática, a pessoa escreve os equivalentes
@@ -455,20 +459,64 @@
     // período mudou ("2020 - Atual" virou "2020 - 2025"), pelo texto sem o período, quando é único.
     const anteriores = new Map();
     const porTexto = new Map();
-    const chaveTexto = (sid, it) => [sid, it.tituloOriginal != null ? it.tituloOriginal : it.titulo, it.detalheOriginal != null ? it.detalheOriginal : it.detalhe].join('|');
+    const porDoi = new Map();
+    const porObra = new Map();
+    const usados = new Set(); // cada item de antes é reaproveitado por um item novo só
+    // O texto do Lattes, não o que a pessoa escreveu por cima: é ele que o currículo novo traz.
+    const doLattes = (it, campo) => (it[campo + 'Original'] != null ? it[campo + 'Original'] : it[campo]);
+    const chaveTexto = (sid, it) => [sid, doLattes(it, 'titulo'), doLattes(it, 'detalhe')].join('|');
+
+    // O registro da mesma obra muda no Lattes: o artigo aceito é publicado (e troca de categoria,
+    // o que muda até a seção), a referência ganha volume e páginas, a pessoa corrige um nome. O
+    // código do item muda junto, e sem mais nada o destaque, a frase do cartão e o resto do que ela
+    // escreveu iriam embora. O DOI e o título da obra atravessam essas mudanças e reencontram o item.
+    const chaveDoi = it => {
+      const m = String(doLattes(it, 'link') || '').match(/\bdoi\.org\/(10\.\S+?)[.,;)\]]*$/i);
+      return m ? 'doi|' + m[1].toLowerCase() : '';
+    };
+    // Só produções, e só títulos longos o bastante: "Relatório final" casaria com outro qualquer.
+    // Onde não há título da obra separado (orientações, bancas), vale o texto do registro, que
+    // atravessa a troca de seção (a orientação em andamento vira concluída).
+    const chaveObra = (s, it) => {
+      if (s.tipo !== 'producao') return '';
+      const t = String(it.obra || doLattes(it, 'titulo') || '').normalize('NFD').replace(/\p{M}/gu, '')
+        .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      return t.length >= 12 ? 'obra|' + t : '';
+    };
+
+    // Chave repetida entre os itens de antes não serve para casar: guarda null e sai de cena.
+    const registrar = (mapa, chave, it) => { if (chave) mapa.set(chave, mapa.has(chave) ? null : it); };
     for (const s of estado.secoes) for (const it of s.itens) {
-      anteriores.set(it.id, it);
-      const k = chaveTexto(s.id, it);
-      porTexto.set(k, porTexto.has(k) ? null : it); // null: repetido, não serve para casar
+      const fila = anteriores.get(it.id);
+      if (fila) fila.push(it); // o mesmo registro duas vezes no currículo: casa um para cada
+      else anteriores.set(it.id, [it]);
+      registrar(porTexto, chaveTexto(s.id, it), it);
+      if (s.tipo === 'livre') continue; // destaque livre não vem do Lattes: não casa com item nenhum
+      registrar(porDoi, chaveDoi(it), it);
+      registrar(porObra, chaveObra(s, it), it);
     }
-    // O casamento pelo texto só vale para um item de antes que sumiu do Lattes (senão um item novo de
-    // texto igual, uma banca repetida em outro ano, herdaria as escolhas do antigo), e uma vez só.
+
+    // Os casamentos por semelhança (DOI, texto, título da obra) só valem para um item de antes que
+    // sumiu do Lattes (senão um item novo parecido, uma banca repetida em outro ano, herdaria as
+    // escolhas do antigo), e uma vez só.
     const idsNovos = new Set(dados.secoes.flatMap(s => s.itens.map(it => it.id)));
+    const disponivel = antes => !!antes && !usados.has(antes) && !idsNovos.has(antes.id);
+    // Quantas vezes cada chave aparece no currículo novo: repetida lá, também não serve para casar.
+    const novas = new Map();
+    for (const s of dados.secoes) for (const it of s.itens) {
+      for (const k of [chaveDoi(it), chaveObra(s, it)]) if (k) novas.set(k, (novas.get(k) || 0) + 1);
+    }
+    const pelaId = id => {
+      const fila = anteriores.get(id);
+      return (fila && fila.shift()) || null;
+    };
+    const porChave = (mapa, chave) => {
+      const antes = chave ? mapa.get(chave) : null;
+      return disponivel(antes) && novas.get(chave) === 1 ? antes : null;
+    };
     const peloTexto = (sid, it) => {
       const antes = porTexto.get(chaveTexto(sid, it));
-      if (!antes || idsNovos.has(antes.id)) return null;
-      porTexto.set(chaveTexto(sid, it), null);
-      return antes;
+      return disponivel(antes) ? antes : null;
     };
     const reimportacao = anteriores.size > 0;
     const ocultos = new Set(estado.ocultos || []); // tirados do site antes de reabrir um index.html
@@ -484,8 +532,9 @@
       const ligada = s.tipo === 'producao' ? PRODUCOES_LIGADAS.test(s.titulo) : SECOES_LIGADAS.test(s.id);
       return Object.assign({}, s, {
         itens: s.itens.map(it => {
-          const antes = anteriores.get(it.id) || peloTexto(s.id, it);
+          const antes = pelaId(it.id) || porChave(porDoi, chaveDoi(it)) || peloTexto(s.id, it) || porChave(porObra, chaveObra(s, it));
           if (antes) {
+            usados.add(antes);
             if (antes.destaque) destaques++;
             const guardado = {
               titulo: antes.titulo, link: antes.link || it.link, manter: antes.manter, destaque: antes.destaque,
@@ -497,6 +546,9 @@
             // ele que "Voltar ao texto do Lattes" leva). O que não foi editado vem do Lattes: a descrição
             // não entra no código do item, então uma descrição atualizada no currículo chega por aqui.
             for (const c of EDITAVEIS) if (editado(antes, c)) { guardado[c] = antes[c]; guardado[c + 'Original'] = it[c] || ''; }
+            // O título de antes só vale quando foi editado: o do Lattes pode ter mudado (é assim que
+            // o item foi reencontrado pelo DOI ou pelo título da obra), e é a referência de agora.
+            if (!editado(antes, 'titulo')) guardado.titulo = it.titulo;
             return Object.assign({}, it, guardado);
           }
           if (ocultos.has(it.id)) return Object.assign(comEdicoes(it, edicoesOcultas[it.id]), { manter: false, destaque: false });
@@ -514,6 +566,23 @@
     const livres = estado.secoes.find(s => s.tipo === 'livre');
     if (livres) secoes.push(livres);
     renumerarDestaques(secoes);
+
+    // Destaque cujo item não foi reencontrado (a produção saiu do currículo, ou o registro mudou
+    // tanto que nem o DOI nem o título da obra a identificam) some calado, e a pessoa só descobre
+    // olhando o site pronto. Aqui ele vira aviso, com o nome da obra, para ela marcar de novo.
+    const perdidos = [];
+    for (const s of estado.secoes) {
+      if (s.tipo === 'livre') continue;
+      for (const it of s.itens) {
+        if (it.destaque && !usados.has(it)) perdidos.push(Site.camposDestaque(it).titulo || it.titulo);
+      }
+    }
+    const avisos = dados.avisos.concat(perdidos.length ? [{
+      texto: perdidos.length === 1
+        ? 'Um destaque saiu: não achei no currículo novo a produção {titulos}. Ela pode ter saído do Lattes ou ter mudado de registro. Se ainda estiver lá, marque-a de novo com ★ nas listas abaixo.'
+        : 'Saíram {n} destaques: não achei no currículo novo as produções {titulos}. Elas podem ter saído do Lattes ou ter mudado de registro. Se ainda estiverem lá, marque-as de novo com ★ nas listas abaixo.',
+      params: { n: perdidos.length, titulos: perdidos.map(t => `“${t.length > 70 ? t.slice(0, 69).trim() + '…' : t}”`).join('; ') },
+    }] : []);
 
     const p = estado.perfil;
     const links = Object.assign({}, p.links);
@@ -534,8 +603,13 @@
       ocultos: [], // já aplicados: agora todas as produções estão no estado
       edicoesOcultas: {},
       parcial: false,
-      avisos: dados.avisos,
+      avisos,
     });
+  }
+
+  // Aviso guardado em português, com ou sem marcadores ({n}, {titulos}): a tela traduz na hora.
+  function textoAviso(a) {
+    return typeof a === 'string' ? _(a) : _(a.texto, a.params);
   }
 
   function totais() {
@@ -1465,7 +1539,7 @@
         <button type="button" class="link" data-acao="trocar-lattes">${_('Usar outro arquivo')}</button></p>` : ''}
       ${estado.avisos.length || ingles ? `<div class="aviso">
         ${ingles ? `<p><strong>${_('Sem tradução automática.')}</strong> ${_('Versão em inglês do site: não há tradução automática. Os campos “Em inglês” desta tela são opcionais, e o que ficar vazio aparece em português. Nas listas abaixo, o lápis (✎) de cada item abre também os campos em inglês.')}</p>` : ''}
-        ${estado.avisos.map(a => `<p>${esc(_(a))}</p>`).join('')}</div>` : ''}
+        ${estado.avisos.map(a => `<p>${esc(textoAviso(a))}</p>`).join('')}</div>` : ''}
 
       <section class="cartao perfil">
         ${htmlFoto()}

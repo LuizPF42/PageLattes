@@ -83,7 +83,7 @@ Por isso ele não compete com o Lattes nem o substitui. **As produções continu
 
 O site é um arquivo só, e esse arquivo guarda as suas escolhas: cores, textos, o que entrou e o que ficou de fora. Por isso o PageLattes consegue reler o site que ele mesmo gerou.
 
-- **Mudou algo no Lattes?** Salve a página do currículo de novo e importe na etapa Lattes. As produções novas entram; o que você já tinha escolhido, escrito e destacado continua como estava.
+- **Mudou algo no Lattes?** Salve a página do currículo de novo e importe na etapa Lattes. As produções novas entram; o que você já tinha escolhido, escrito e destacado continua como estava, mesmo quando o registro mudou de cara no currículo — o artigo aceito virou publicado e trocou de categoria, a referência ganhou volume e páginas, a orientação em andamento foi concluída. Se ainda assim alguma produção em destaque não for reencontrada, o construtor avisa e diz qual é, para você marcá-la de novo.
 - **Quer trocar a cor, mexer no texto ou tirar um item?** No mesmo navegador, está tudo salvo: abra o construtor, ajuste e baixe o `index.html` de novo. Em outro computador, comece pela etapa **0 Atualizar** e traga o `index.html` que está publicado no seu GitHub.
 - **Para colocar no ar**, envie o arquivo novo pela mesma página do GitHub. Como o nome é o mesmo, ele entra no lugar do antigo.
 
