@@ -277,8 +277,17 @@
       })),
       destaques,
       secoes,
+      url: urlPublicada(estado.publicacao && estado.publicacao.usuario),
       atualizadoEm: estado.fonte ? estado.fonte.atualizadoEm : '',
     };
+  }
+
+  // O endereço do site no GitHub Pages, deduzido do nome de usuário da etapa Publicar. Vazio
+  // enquanto a pessoa não disse qual é: melhor não ter canonical do que apontar para o lugar errado.
+  const USUARIO_VALIDO = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i; // regra de nomes do GitHub
+  function urlPublicada(usuario) {
+    const u = String(usuario || '').trim().toLowerCase();
+    return USUARIO_VALIDO.test(u) ? `https://${u}.github.io/` : '';
   }
 
   // Um item do Lattes (ou um destaque livre) no idioma do site. Em português, volta como está. Em inglês,
@@ -508,11 +517,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(d.nome)}</title>
+<title>${esc(titulo(d))}</title>
 ${d.bio ? `<meta name="description" content="${esc(resumir(textoPuro(d.bio), 160))}">` : ''}
+${d.url ? `<link rel="canonical" href="${esc(d.url)}">` : ''}
 <meta property="og:type" content="profile">
 <meta property="og:title" content="${esc(d.nome)}">
 ${d.subtitulo || d.bio ? `<meta property="og:description" content="${esc(d.subtitulo || resumir(textoPuro(d.bio), 160))}">` : ''}
+${d.url ? `<meta property="og:url" content="${esc(d.url)}">` : ''}
+${cardHtml(versoes[0][0])}
+${opcoes.previa ? '' : dadoEstruturado(d)}
 <link rel="icon" href="${favicon(d.nome, Tema.variaveis(ap)['--acento'])}">
 ${opcoes.previa ? '<base target="_blank">' : ''}
 ${fontes}
@@ -528,6 +541,46 @@ ${ambos ? SCRIPT_IDIOMAS : ''}
 ${opcoes.dadosConstrutor ? `<script type="application/json" id="dados-do-construtor">${JSON.stringify(opcoes.dadosConstrutor).replace(/</g, '\\u003c')}</script>` : ''}
 </body>
 </html>`;
+  }
+
+  // A imagem do card que aparece quando alguém compartilha o site (WhatsApp, LinkedIn, Bluesky).
+  // É a mesma para todos os sites gerados, e mora no GitHub Pages do PageLattes: a foto da pessoa
+  // fica embutida no index.html como data URI, e rede social nenhuma baixa um endereço data:.
+  // Só a frase muda de idioma; quem gera as duas é prints/gerar-og.py.
+  const CARD = 'https://luizpf42.github.io/PageLattes/';
+  function cardHtml(idioma) {
+    const img = `${CARD}og${idioma === 'en' ? '-en' : ''}.png`;
+    return `<meta property="og:image" content="${img}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="PageLattes">
+<meta name="twitter:card" content="summary_large_image">`;
+  }
+
+  // O título da aba, e a linha azul do resultado de busca: "Nome — o que a pessoa faz". Só o nome
+  // perde para qualquer homônimo; o subtítulo é o que distingue. Cortado para caber no Google.
+  const TITULO_MAX = 70;
+  function titulo(d) {
+    const sub = (d.subtitulo || '').trim();
+    const espaco = TITULO_MAX - d.nome.length - 3;
+    return !sub || espaco < 15 ? d.nome : `${d.nome} — ${resumir(sub, espaco)}`;
+  }
+
+  // Dado estruturado (schema.org/Person), que fica fora da prévia: o iframe é sandbox sem
+  // allow-scripts, e qualquer <script>, mesmo sendo só dado, vira um erro no console do construtor.
+  // Diz ao buscador que a página é sobre uma pessoa e liga o
+  // site aos perfis que ela mesma pôs aqui (ORCID, Lattes, GitHub, LinkedIn), que é o que ajuda a
+  // reconhecê-la como a mesma pessoa em todos eles. O e-mail fica de fora de propósito: já está na
+  // página para quem lê, e no JSON-LD só facilitaria a coleta automática de endereços.
+  function dadoEstruturado(d) {
+    const pessoa = { '@context': 'https://schema.org', '@type': 'Person', name: d.nome };
+    if (d.url) pessoa.url = d.url;
+    const texto = d.bio ? textoPuro(d.bio) : d.subtitulo;
+    if (texto) pessoa.description = resumir(texto, 300);
+    // Só endereço de verdade: o e-mail fica fora, e a prévia usa "#" nos links de exemplo.
+    const perfis = (d.links || []).map(l => l.url).filter(u => /^https?:\/\//i.test(u || ''));
+    if (perfis.length) pessoa.sameAs = perfis;
+    return `<script type="application/ld+json">${JSON.stringify(pessoa).replace(/</g, '\\u003c')}</script>`;
   }
 
   // Site em dois idiomas: sem JavaScript, fica o português; com ele, começa no idioma do navegador

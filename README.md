@@ -135,7 +135,8 @@ e abra `http://localhost:8765`.
 | `js/i18n.js` | O idioma da interface. |
 | `js/ingles.js` | As regras do site em inglês: grau da formação, país e nome de instituição. Só vocabulário fechado; não há tradução automática. |
 | `fonts/` | As fontes, com as licenças ao lado. O site final embute só o par escolhido. |
-| `prints/` | Os prints deste README e o script que os gera. |
+| `prints/` | Os prints deste README e os scripts que geram as imagens: `gerar.js` (os prints) e `gerar-og.py` (o card de compartilhamento). |
+| `og.png`, `og-en.png` | O card 1200×630 que aparece quando alguém compartilha um site gerado. |
 | `parked/` | O tradutor por IA que foi estacionado, com o motivo (veja abaixo). |
 
 ### Idiomas
@@ -160,13 +161,20 @@ node gerar.js
 
 As fontes em `fonts/` são distribuídas sob a SIL Open Font License; os textos das licenças estão na mesma pasta.
 
+### O que o site gerado diz aos buscadores
+
+O `<head>` de cada site sai com `<title>` de "Nome — o que a pessoa faz" (só o nome perde para qualquer homônimo), `meta description` tirada da apresentação, `og:` para o card de compartilhamento e dado estruturado JSON-LD `schema.org/Person`, com `sameAs` apontando para os perfis que a pessoa já pôs no site (Lattes, ORCID, Google Acadêmico, LinkedIn) — é isso que ajuda o buscador a entender que os perfis e o site são da mesma pessoa. O e-mail fica fora do JSON-LD de propósito: já está na página para quem lê, e ali só facilitaria a coleta automática.
+
+A `<link rel="canonical">` e a `og:url` saem do nome de usuário da etapa Publicar, e ficam de fora enquanto ele não estiver preenchido: melhor não ter canonical do que apontar para o lugar errado.
+
+O card de compartilhamento usa uma imagem 1200×630 igual para todos os sites gerados (`og.png`, e `og-en.png` para o site em inglês), servida pelo GitHub Pages do próprio PageLattes. A foto da pessoa seria melhor, mas ela fica embutida no `index.html` como *data URI*, e rede social nenhuma baixa um endereço `data:` — usar a foto certa exigiria publicar um segundo arquivo.
+
+Vale lembrar que nada disso faz o Google **achar** o site: o que faz é ter links apontando para ele (o campo de página do próprio Lattes, o ORCID, o LinkedIn, a página do departamento) e registrar o endereço no Google Search Console.
+
 ### Melhorias a serem implementadas
 
-Hoje nem o site do construtor nem o site gerado fazem nada de especial para o Google encontrá-los: sem `robots.txt`, sem `sitemap.xml`, sem dado estruturado, e o card que aparece ao compartilhar um link não tem imagem. A lista completa, com o que já foi descartado e por quê, está em [`TODO.md`](TODO.md). Resumo:
+A lista completa, com o que já foi descartado e por quê, está em [`TODO.md`](TODO.md). Resumo:
 
-- `og:image` com foto do perfil (ou uma imagem padrão, quando não houver foto) no site gerado.
-- `<link rel="canonical">` no site gerado.
-- Dado estruturado JSON-LD (`schema.org/Person`) no site gerado.
 - Produções com link direto para o DOI, quando o Lattes trouxer um.
 - Botão de "copiar citação" em ABNT nas produções.
 - Produções agrupadas por ano.
