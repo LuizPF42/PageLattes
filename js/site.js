@@ -898,7 +898,7 @@ h2::before{content:"";flex:none;width:1rem;height:.22rem;border-radius:2px;backg
 .links li:first-child a{background:var(--acento);border-color:var(--acento);color:var(--sobre-acento)}
 .sobre{max-width:46em;font-size:1.08rem}
 .sobre p{margin:0 0 1em}
-.sobre p,.destaque-texto{text-align:var(--alinhamento,start);-webkit-hyphens:var(--hifens,manual);hyphens:var(--hifens,manual)}
+.sobre p,.destaque-texto{text-align:var(--alinhamento,start)}
 section{margin-top:3.25rem}
 .resumo-perfil{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:1.5rem 3rem;max-width:46em;margin-top:2.25rem}
 .resumo-perfil section{margin-top:0}
@@ -1002,6 +1002,8 @@ details[open]>summary{display:none}
   .barra-topo .abas a{padding:.55rem 0 .7rem}
   .marca{padding:.7rem 0 .2rem}
   .lista li{grid-template-columns:1fr;gap:.1rem}
+  /* Sem hifenização, o justificado abre buracos entre as palavras numa coluna estreita. */
+  .sobre p,.destaque-texto{text-align:start}
 }`;
 
   return { dados, exemplo, html, cssFoto, subtituloPadrao, interessesPadrao, textoComLinks, textoPuro, camposDestaque, tipoDe, itemNoIdioma };

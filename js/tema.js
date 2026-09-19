@@ -261,9 +261,10 @@
       '--fonte-texto': pilha(ap.fonteTexto),
       '--peso-titulo': String(titulo.peso),
       '--espaco-titulo': titulo.espaco,
-      // Justificado com hifenização, para não abrir buracos entre as palavras em telas estreitas.
+      // Sem hifenização: palavra cortada no fim da linha atrapalha a leitura e fica estranha num
+      // nome próprio ou num termo técnico. Em tela estreita o justificado abriria buracos entre as
+      // palavras, então lá o texto passa a alinhar à esquerda (ver o CSS do site).
       '--alinhamento': ap.alinhamento === 'justificado' ? 'justify' : 'start',
-      '--hifens': ap.alinhamento === 'justificado' ? 'auto' : 'manual',
       // Vazias quando a pessoa não ajustou: o CSS do site usa o tamanho padrão de cada estrutura.
       '--foto-largura': ap.fotoLargura ? ap.fotoLargura + 'px' : '',
       '--foto-proporcao': ap.fotoProporcao ? String(ap.fotoProporcao) : '',
