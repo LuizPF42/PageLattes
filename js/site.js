@@ -282,7 +282,7 @@
   }
 
   // Um item do Lattes (ou um destaque livre) no idioma do site. Em português, volta como está. Em inglês,
-  // vale o que a pessoa escreveu (tituloEn, detalheEn, descricaoEn, dTextoEn; nos livres, dTituloEn,
+  // vale o que a pessoa escreveu (tituloEn, detalheEn, descricaoEn, obsEn, dTextoEn; nos livres, dTituloEn,
   // dVeiculoEn e categoriaEn); sem isso, as regras de ingles.js cuidam do grau da formação ("Doutorado
   // em Direito" -> "PhD in Law") e da linha de instituição ("Universidade de São Paulo, USP, Brasil" ->
   // "University of São Paulo, USP"); e o resto fica em português, inteiro. As produções (referências
@@ -300,6 +300,7 @@
       // Nos projetos, o detalhe é o papel da pessoa ("Coordenador"), que o site traduz como rótulo.
       if (!i.integrantes) t.detalhe = ou(i.detalheEn, linhaInstituicao(i.detalhe, true, false));
       if (i.descricao) t.descricao = ou(i.descricaoEn, i.descricao);
+      if (i.obs) t.obs = ou(i.obsEn, i.obs);
       if (i.bolsa) t.bolsa = linhaInstituicao(i.bolsa, true, false);
     }
     t.dTexto = ou(i.dTextoEn, i.dTexto);
@@ -759,21 +760,22 @@ ${cada(id => `.abas a[href="#${id}"]`)}{color:var(--texto);border-color:var(--ac
         <div>
           <p class="item-titulo">${citacao(texto)}</p>
           ${it.detalhe ? `<p class="item-detalhe">${esc(it.integrantes ? _(it.detalhe) : capsParaTitulo(it.detalhe))}</p>` : ''}
-          ${it.obs && it.obs.length <= 220 ? `<p class="item-obs">${esc(it.obs)}</p>` : ''}
+          ${textoLongo(it.obs, 'item-obs')}
           ${orientacao(it)}
-          ${descricao(it.descricao)}
+          ${textoLongo(it.descricao, 'item-descricao')}
           ${integrantes(it.integrantes, nome)}
           ${financiamento(it.financiadores)}
         </div>
       </li>`;
   }
 
-  // Descrição do projeto por inteiro. Se for longa, o começo fica à vista e o resto abre num
-  // "Continuar lendo" (details/summary, sem JavaScript), cortado no fim de uma frase.
+  // Texto longo por inteiro: a descrição do projeto e as "Outras informações" do vínculo
+  // profissional. Se for longo, o começo fica à vista e o resto abre num "Continuar lendo"
+  // (details/summary, sem JavaScript), cortado no fim de uma frase.
   const DESCRICAO_VISIVEL = 400;
-  function descricao(texto) {
+  function textoLongo(texto, classe) {
     if (!texto) return '';
-    if (texto.length <= DESCRICAO_VISIVEL + 150) return `<p class="item-descricao">${esc(texto)}</p>`;
+    if (texto.length <= DESCRICAO_VISIVEL + 150) return `<p class="${classe}">${esc(texto)}</p>`;
     let corte = -1;
     const fimDeFrase = /[.!?;](?=\s)/g;
     let m;
@@ -781,7 +783,7 @@ ${cada(id => `.abas a[href="#${id}"]`)}{color:var(--texto);border-color:var(--ac
     if (corte < 150) corte = texto.lastIndexOf(' ', DESCRICAO_VISIVEL);
     const inicio = texto.slice(0, corte).trim();
     const resto = texto.slice(corte).trim();
-    return `<p class="item-descricao">${esc(inicio)}</p><details class="item-mais"><summary>${esc(_('Continuar lendo'))}</summary><p class="item-descricao">${esc(resto)}</p></details>`;
+    return `<p class="${classe}">${esc(inicio)}</p><details class="item-mais"><summary>${esc(_('Continuar lendo'))}</summary><p class="${classe}">${esc(resto)}</p></details>`;
   }
 
   // "Integrantes: Fulana (coordenadora), Você, Beltrano". O papel "Integrante" fica implícito;

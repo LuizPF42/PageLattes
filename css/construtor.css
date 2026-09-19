@@ -496,6 +496,12 @@ h3.rotulo-en + .dica { margin-top: .15rem; }
 .item-link.vazio { color: var(--suave); text-decoration: none; opacity: .75; }
 .item-link.vazio:hover { color: var(--link); opacity: 1; }
 .item.fora .item-link { opacity: .45; }
+/* "Mostrar descrição completa": abre na própria lista o texto longo que veio do Lattes. */
+.item-mais {
+  padding: 0; border: 0; background: none;
+  color: var(--link); font-size: .8rem; text-decoration: underline; text-underline-offset: 2px;
+}
+.item.fora .item-mais { opacity: .45; }
 .editor-link { display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; font-weight: 600; }
 .editor-link:focus-within { outline: none; }
 .editor-link em { font-style: normal; font-weight: 400; color: var(--suave); }

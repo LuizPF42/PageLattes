@@ -49,6 +49,8 @@
     // projetos na revisão
     'Descrição': 'Description',
     '(pode encurtar ou apagar; o site mostra o texto inteiro)': '(you can shorten or delete it; the site shows the full text)',
+    'Outras informações': 'Other information',
+    '(o que você fez nesse vínculo; pode encurtar ou apagar)': '(what you did in this position; you can shorten or delete it)',
     'Integrantes': 'Team',
     'Financiamento': 'Funding',
     'Site': 'Website',
@@ -235,6 +237,7 @@
     'Texto do item em inglês': 'Item text in English',
     'Detalhe em inglês (instituição, papel…)': 'Detail in English (institution, role…)',
     'Descrição em inglês': 'Description in English',
+    'Outras informações em inglês': 'Other information in English',
     'Se ficar vazio, o site mostra: {texto}': 'If left empty, the site shows: {texto}',
     'Orientação: {nome}': 'Advisor: {nome}',
     'Coorientação: {nome}': 'Co-advisor: {nome}',
@@ -270,6 +273,8 @@
     'Marcar todos': 'Select all',
     'Desmarcar todos': 'Deselect all',
     'Mostrar todos os {n}': 'Show all {n}',
+    'Mostrar descrição completa': 'Show the full description',
+    'Mostrar menos': 'Show less',
     'Texto do item': 'Item text',
     'Detalhe': 'Detail',
     '(instituição, papel…)': '(institution, role…)',
@@ -307,6 +312,9 @@
   // Sugestões de tipo para os destaques fora do Lattes (a pessoa pode escrever outro).
   const TIPOS_LIVRES = ['Software', 'Projeto', 'Site', 'Prêmio', 'Curso', 'Podcast', 'Base de dados', 'Grupo de pesquisa'];
   const ITENS_VISIVEIS = 8;
+  // Na lista da etapa Conteúdo, os textos longos do Lattes ficam resumidos até aqui; o botão
+  // "Mostrar descrição completa" abre o texto inteiro do item, sem precisar do lápis.
+  const RESUMOS = { obs: 160, descricao: 220 };
   const LARGURA_PREVIA = 1000; // a prévia é desenhada nesta largura e reduzida para caber na coluna
   const ALTURA_PREVIA = 1300;
 
@@ -347,7 +355,7 @@
   // temaPrevia: a prévia mostra o site no claro ou no escuro (só faz diferença no modo automático).
   // idiomaPrevia: idem para o idioma, quando o site sai em português e inglês. bioAtivo: qual editor
   // de apresentação (pt ou en) recebeu o foco por último, para os links e o menu de contexto.
-  const ui = { erro: '', editando: null, expandidas: new Set(), largura: 1280, temaPrevia: 'claro', idiomaPrevia: 'pt', bioAtivo: 'bio' };
+  const ui = { erro: '', editando: null, expandidas: new Set(), textoCompleto: new Set(), largura: 1280, temaPrevia: 'claro', idiomaPrevia: 'pt', bioAtivo: 'bio' };
   let estado = carregar() || novoEstado();
 
   // ---------- estado ----------
@@ -377,7 +385,7 @@
   // Campos do lápis que a pessoa pode editar. Na primeira edição, a versão do Lattes fica guardada em
   // `<campo>Original`: assim dá para saber o que foi editado aqui (e mantê-lo ao reimportar) e o que
   // mudou no currículo (e deixar entrar), e para voltar ao texto do Lattes.
-  const EDITAVEIS = ['titulo', 'detalhe', 'descricao', 'link'];
+  const EDITAVEIS = ['titulo', 'detalhe', 'descricao', 'obs', 'link'];
 
   function editado(it, campo) {
     return it[campo + 'Original'] != null && (it[campo] || '') !== (it[campo + 'Original'] || '');
@@ -397,7 +405,7 @@
   function edicoesDe(it) {
     const e = {};
     for (const c of EDITAVEIS) if (editado(it, c)) e[c] = it[c];
-    for (const c of ['tituloEn', 'detalheEn', 'descricaoEn']) if (it[c]) e[c] = it[c];
+    for (const c of ['tituloEn', 'detalheEn', 'descricaoEn', 'obsEn']) if (it[c]) e[c] = it[c];
     return Object.keys(e).length ? e : null;
   }
 
@@ -1651,10 +1659,26 @@
       </section>`;
   }
 
+  // "Outras informações" é o texto livre que o Lattes guarda em cada vínculo profissional: o que a
+  // pessoa fez ali. O lápis abre o campo mesmo vazio, para dar de escrever (ou de apagar e voltar
+  // a escrever), como na descrição dos projetos. Nas outras seções o mesmo campo é registro (o
+  // título da tese, na formação) e fica como veio.
+  function temOutrasInfos(s) {
+    return /^AtuacaoProfissional/.test(s.id || '');
+  }
+
+  // Um texto do Lattes que não cabe resumido na lista (descrição de projeto, "Outras informações"
+  // de um vínculo): é o que o botão "Mostrar descrição completa" abre.
+  function temTextoCortado(it) {
+    return Object.entries(RESUMOS).some(([campo, n]) => (it[campo] || '').length > n);
+  }
+
   function telaItem(s, si, it, ii) {
     const chave = `${si}:${ii}`;
     const id = `item-${si}-${ii}`;
     const editando = ui.editando === chave;
+    const inteiro = ui.textoCompleto.has(chave);
+    const resumo = campo => inteiro ? it[campo] : resumir(it[campo], RESUMOS[campo]);
     const conteudo = editando ? `
       <div class="editor">
         <textarea data-editor="${chave}" rows="3" aria-label="${esc(_('Texto do item'))}">${esc(it.titulo)}</textarea>
@@ -1667,6 +1691,11 @@
         <label class="editor-link">
           <span>${_('Descrição')} <em>${_('(pode encurtar ou apagar; o site mostra o texto inteiro)')}</em></span>
           <textarea data-editor-descricao="${chave}" rows="5">${esc(it.descricao || '')}</textarea>
+        </label>` : ''}
+        ${temOutrasInfos(s) ? `
+        <label class="editor-link">
+          <span>${_('Outras informações')} <em>${_('(o que você fez nesse vínculo; pode encurtar ou apagar)')}</em></span>
+          <textarea data-editor-obs="${chave}" rows="4">${esc(it.obs || '')}</textarea>
         </label>` : ''}
         ${siteEmIngles() && s.tipo !== 'producao' ? editorItemEn(s, it, chave) : ''}
         <label class="editor-link">
@@ -1684,13 +1713,16 @@
           <span class="titulo">${esc(it.titulo)}</span>
           ${siteEmIngles() && (it.tituloEn || it.detalheEn) ? `<span class="en-item" lang="en">${esc([it.tituloEn, it.detalheEn].filter(Boolean).join(' · '))}</span>` : ''}
           ${it.detalhe ? `<span class="detalhe">${esc(it.detalhe)}</span>` : ''}
-          ${it.obs ? `<span class="obs">${esc(resumir(it.obs, 160))}</span>` : ''}
-          ${it.descricao ? `<span class="obs">${esc(resumir(it.descricao, 220))}</span>` : ''}
+          ${it.obs ? `<span class="obs">${esc(resumo('obs'))}</span>` : ''}
+          ${it.descricao ? `<span class="obs">${esc(resumo('descricao'))}</span>` : ''}
           ${it.integrantes ? `<span class="detalhe">${esc(_('Integrantes'))}: ${esc(resumir(nomesDe(it.integrantes), 200))}</span>` : ''}
           ${it.financiadores ? `<span class="detalhe">${esc(_('Financiamento'))}: ${esc(resumir(nomesDe(it.financiadores), 120))}</span>` : ''}
           ${it.orientador ? `<span class="obs">${esc(_('Orientação: {nome}', { nome: it.orientador }))}${it.coorientador ? ` · ${esc(_('Coorientação: {nome}', { nome: it.coorientador }))}` : ''}</span>` : ''}
           ${it.bolsa ? `<span class="obs">${esc(_('Bolsista: {nome}', { nome: it.bolsa }))}</span>` : ''}
         </label>
+        ${temTextoCortado(it) ? `
+        <button type="button" class="item-mais" data-acao="texto-completo" data-item="${chave}"
+          aria-expanded="${inteiro}">${inteiro ? _('Mostrar menos') : _('Mostrar descrição completa')}</button>` : ''}
         ${it.link || s.tipo === 'producao' ? `
         <button type="button" class="item-link${it.link ? '' : ' vazio'}" data-acao="editar" data-foco="link" data-item="${chave}"
           title="${it.link ? esc(it.link) : esc(_('Adicionar um link para este item'))}">${it.link ? '↗ ' + esc(dominio(it.link)) : _('+ link')}</button>` : ''}
@@ -1721,6 +1753,7 @@
           <textarea data-editor-campo="tituloEn" data-item="${chave}" rows="2" lang="en" aria-label="${esc(_('Texto do item em inglês'))}" placeholder="${esc(_('Texto do item em inglês'))}">${esc(it.tituloEn || '')}</textarea>
           ${!it.integrantes ? `<input data-editor-campo="detalheEn" data-item="${chave}" value="${esc(it.detalheEn || '')}" lang="en" aria-label="${esc(_('Detalhe em inglês (instituição, papel…)'))}" placeholder="${esc(_('Detalhe em inglês (instituição, papel…)'))}">` : ''}
           ${temDescricao ? `<textarea data-editor-campo="descricaoEn" data-item="${chave}" rows="4" lang="en" aria-label="${esc(_('Descrição em inglês'))}" placeholder="${esc(_('Descrição em inglês'))}">${esc(it.descricaoEn || '')}</textarea>` : ''}
+          ${temOutrasInfos(s) ? `<textarea data-editor-campo="obsEn" data-item="${chave}" rows="4" lang="en" aria-label="${esc(_('Outras informações em inglês'))}" placeholder="${esc(_('Outras informações em inglês'))}">${esc(it.obsEn || '')}</textarea>` : ''}
           ${regra ? `<p class="dica">${_('Se ficar vazio, o site mostra: {texto}', { texto: `<em lang="en">${esc(regra)}</em>` })}</p>` : ''}
         </div>`;
   }
@@ -1779,6 +1812,7 @@
       if (texto.includes('id="dados-do-construtor"')) reabrirSite(texto);
       else estado = aplicarLattes(Lattes.lerHtml(texto));
       ui.expandidas.clear();
+      ui.textoCompleto.clear();
       ui.editando = null;
       salvar();
       render();
@@ -1917,6 +1951,7 @@
         if (!confirm(_('Apagar tudo o que foi feito aqui e começar de novo?'))) return;
         estado = novoEstado();
         ui.expandidas.clear();
+        ui.textoCompleto.clear();
         ui.editando = null;
         try { localStorage.removeItem(CHAVE); } catch (err) { /* nada a limpar */ }
         render();
@@ -1950,6 +1985,15 @@
         ui.expandidas.add(estado.secoes[secao].id);
         trocarSecao(secao);
         break;
+
+      case 'texto-completo': {
+        const chave = `${si}:${ii}`;
+        if (!ui.textoCompleto.delete(chave)) ui.textoCompleto.add(chave);
+        trocarItem(si, ii);
+        const botao = app.querySelector(`li[data-li="${chave}"] [data-acao="texto-completo"]`);
+        if (botao) botao.focus();
+        break;
+      }
 
       case 'novo-destaque-livre': {
         if (totais().destaques >= MAX_DESTAQUES) {
@@ -2042,7 +2086,7 @@
       case 'restaurar-item': {
         // Volta os campos do lápis ao texto do Lattes; vale ao salvar.
         const it = estado.secoes[si].itens[ii];
-        const seletor = { titulo: 'data-editor', detalhe: 'data-editor-detalhe', descricao: 'data-editor-descricao', link: 'data-editor-link' };
+        const seletor = { titulo: 'data-editor', detalhe: 'data-editor-detalhe', descricao: 'data-editor-descricao', obs: 'data-editor-obs', link: 'data-editor-link' };
         for (const c of EDITAVEIS) {
           const campo = app.querySelector(`[${seletor[c]}="${si}:${ii}"]`);
           if (campo && it[c + 'Original'] != null) campo.value = it[c + 'Original'];
@@ -2065,7 +2109,9 @@
     if (campoDetalhe) gravarCampo(it, 'detalhe', campoDetalhe.value.replace(/\s+/g, ' ').trim());
     const campoDescricao = app.querySelector(`[data-editor-descricao="${si}:${ii}"]`);
     if (campoDescricao) gravarCampo(it, 'descricao', campoDescricao.value.replace(/\s+/g, ' ').trim());
-    // Os campos em inglês (tituloEn, detalheEn, descricaoEn), quando o site sai em inglês.
+    const campoObs = app.querySelector(`[data-editor-obs="${si}:${ii}"]`);
+    if (campoObs) gravarCampo(it, 'obs', campoObs.value.replace(/\s+/g, ' ').trim());
+    // Os campos em inglês (tituloEn, detalheEn, descricaoEn, obsEn), quando o site sai em inglês.
     app.querySelectorAll(`[data-editor-campo][data-item="${si}:${ii}"]`).forEach(c => {
       it[c.dataset.editorCampo] = c.value.replace(/\s+/g, ' ').trim();
     });
@@ -2086,11 +2132,12 @@
       mudarLargura(ui.largura + passo);
       return;
     }
-    const campo = e.target.closest('[data-editor], [data-editor-link], [data-editor-detalhe], [data-editor-descricao], [data-editor-campo]');
+    const campo = e.target.closest('[data-editor], [data-editor-link], [data-editor-detalhe], [data-editor-descricao], [data-editor-obs], [data-editor-campo]');
     if (!campo) return;
-    const [si, ii] = (campo.dataset.editor || campo.dataset.editorLink || campo.dataset.editorDetalhe || campo.dataset.editorDescricao || campo.dataset.item).split(':').map(Number);
-    const descricao = campo.dataset.editorDescricao || campo.dataset.editorCampo === 'descricaoEn'; // texto longo: Enter quebra linha
-    if (e.key === 'Enter' && !e.shiftKey && !descricao) { e.preventDefault(); salvarEdicao(si, ii); }
+    const [si, ii] = (campo.dataset.editor || campo.dataset.editorLink || campo.dataset.editorDetalhe || campo.dataset.editorDescricao || campo.dataset.editorObs || campo.dataset.item).split(':').map(Number);
+    // Texto longo: Enter quebra linha, em vez de salvar.
+    const longo = campo.dataset.editorDescricao || campo.dataset.editorObs || /^(descricaoEn|obsEn)$/.test(campo.dataset.editorCampo || '');
+    if (e.key === 'Enter' && !e.shiftKey && !longo) { e.preventDefault(); salvarEdicao(si, ii); }
     if (e.key === 'Escape') { ui.editando = null; trocarItem(si, ii); }
   });
 
