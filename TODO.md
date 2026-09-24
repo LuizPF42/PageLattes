@@ -17,15 +17,17 @@
       `description` e `sameAs` com os links que a pessoa já colocou no
       próprio site. O e-mail fica de fora: já está na página para quem lê, e
       no JSON-LD só facilitaria a coleta automática de endereços.
-- [x] `og:image` (com `twitter:card`), apontando para uma imagem 1200×630
-      igual para todos os sites gerados, servida pelo GitHub Pages do próprio
-      PageLattes (`og.png`, e `og-en.png` para o site em inglês; quem as gera
-      é `prints/gerar-og.py`). A ideia original era usar a foto do perfil,
-      mas ela fica embutida no `index.html` como *data URI*, e rede social
-      nenhuma baixa um endereço `data:` — para o card sair com a foto certa
-      seria preciso publicar um segundo arquivo junto do `index.html`, o que
-      quebra o "um arquivo só". Reavaliar se um dia a etapa Publicar passar a
-      enviar mais de um arquivo.
+- [x] `og:image` (com `twitter:card`) com as iniciais do nome sobre a cor
+      de destaque, desenhado pelo placehold.co a partir da URL (cor, letras e
+      fonte vão no endereço), e a mesma imagem em 192×192 como
+      `apple-touch-icon`, para o Google ter um ícone de verdade. A ideia
+      original era usar a foto do perfil, mas ela fica embutida no
+      `index.html` como *data URI*, e rede social nenhuma baixa um endereço
+      `data:` — para o card sair com a foto seria preciso publicar um segundo
+      arquivo junto do `index.html`, o que quebra o "um arquivo só".
+      Reavaliar se um dia a etapa Publicar passar a enviar mais de um
+      arquivo. Os `og.png` e `og-en.png` genéricos continuam no ar para os
+      sites publicados antes da mudança.
 - [ ] `schema.org/Person`: acrescentar `jobTitle` e `affiliation` a partir do
       vínculo atual da Atuação Profissional. Ficou de fora por ora porque
       quem tem mais de um vínculo atual exigiria escolher um, e escolher

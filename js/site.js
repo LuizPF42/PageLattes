@@ -524,9 +524,10 @@ ${d.url ? `<link rel="canonical" href="${esc(d.url)}">` : ''}
 <meta property="og:title" content="${esc(d.nome)}">
 ${d.subtitulo || d.bio ? `<meta property="og:description" content="${esc(d.subtitulo || resumir(textoPuro(d.bio), 160))}">` : ''}
 ${d.url ? `<meta property="og:url" content="${esc(d.url)}">` : ''}
-${cardHtml(versoes[0][0])}
+${cardHtml(d, ap)}
 ${opcoes.previa ? '' : dadoEstruturado(d)}
 <link rel="icon" href="${favicon(d.nome, Tema.variaveis(ap)['--acento'])}">
+${opcoes.previa ? '' : `<link rel="apple-touch-icon" href="${imagemIniciais(d.nome, ap, 192, 192)}">`}
 <base target="_blank">
 ${fontes}
 <style id="tema">${Tema.css(ap)}</style>
@@ -543,18 +544,25 @@ ${opcoes.dadosConstrutor ? `<script type="application/json" id="dados-do-constru
 </html>`;
   }
 
-  // A imagem do card que aparece quando alguém compartilha o site (WhatsApp, LinkedIn, Bluesky).
-  // É a mesma para todos os sites gerados, e mora no GitHub Pages do PageLattes: a foto da pessoa
-  // fica embutida no index.html como data URI, e rede social nenhuma baixa um endereço data:.
-  // Só a frase muda de idioma; quem gera as duas é prints/gerar-og.py.
-  const CARD = 'https://luizpf42.github.io/PageLattes/';
-  function cardHtml(idioma) {
-    const img = `${CARD}og${idioma === 'en' ? '-en' : ''}.png`;
-    return `<meta property="og:image" content="${img}">
+  // A imagem do card que aparece quando alguém compartilha o site (WhatsApp, LinkedIn, Bluesky): as
+  // iniciais do nome sobre a cor de destaque, como o ícone da aba. Rede social nenhuma baixa um
+  // endereço data:, e o site é um arquivo só; quem desenha o PNG é o placehold.co, a partir do
+  // próprio endereço. As iniciais ficam no centro, que é o recorte quadrado do WhatsApp.
+  function cardHtml(d, ap) {
+    return `<meta property="og:image" content="${imagemIniciais(d.nome, ap, 1200, 630)}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="PageLattes">
+<meta property="og:image:alt" content="${esc(d.nome)}">
 <meta name="twitter:card" content="summary_large_image">`;
+  }
+
+  // O placehold.co só tem algumas fontes do Google; cada fonte de título vai para a mais parecida.
+  const FONTE_CARD = { inter: 'roboto', 'source-serif': 'lora', playfair: 'playfair-display', nunito: 'poppins', 'plex-sans': 'source-sans-pro', 'plex-mono': 'roboto', inconsolata: 'roboto' };
+  function imagemIniciais(nome, ap, largura, altura) {
+    const cor = ap.acento.slice(1);
+    const texto = corSobre(ap.acento).slice(1);
+    const fonte = FONTE_CARD[ap.fonteTitulo] || 'roboto';
+    return `https://placehold.co/${largura}x${altura}/${cor}/${texto}/png?text=${encodeURIComponent(iniciais(nome))}&amp;font=${fonte}`;
   }
 
   // O título da aba, e a linha azul do resultado de busca: "Nome — o que a pessoa faz". Só o nome
@@ -608,12 +616,21 @@ document.addEventListener('click',function(e){var b=e.target.closest&&e.target.c
     return `:root{--foto-src:url("${String(d.foto).replace(/["\\]/g, '')}")${tamanho}}`;
   }
 
+  // A primeira letra do primeiro e do último nome.
+  function iniciais(nome) {
+    const partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
+    return ((partes[0] || '?')[0] + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+  }
+
+  // Letra branca sobre a cor de destaque, ou quase preta quando a cor é clara demais para o branco.
+  function corSobre(cor) {
+    return Tema.contraste(cor, '#ffffff') >= 3 ? '#ffffff' : '#1a1a1a';
+  }
+
   // Ícone da aba: as iniciais do nome sobre a cor de destaque.
   function favicon(nome, cor) {
-    const partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
-    const iniciais = ((partes[0] || '?')[0] + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${cor}"/>` +
-      `<text x="32" y="33" dominant-baseline="middle" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="${Tema.contraste(cor, '#ffffff') >= 3 ? '#fff' : '#1a1a1a'}">${esc(iniciais)}</text></svg>`;
+      `<text x="32" y="33" dominant-baseline="middle" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="${corSobre(cor)}">${esc(iniciais(nome))}</text></svg>`;
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
