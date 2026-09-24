@@ -471,7 +471,7 @@
   // Um site inteiro (cabeçalho, corpo, rodapé) no idioma ativo. `seletor` é o botão PT/EN, quando há.
   function corpoSite(d, ap, opcoes, seletor = '') {
     const abas = ap.layout === 'abas' ? montarAbas(d, ap.estrutura, ap.referencias === 'completas') : null;
-    const alvo = opcoes.previa ? ' target="_self"' : ''; // na prévia, os outros links abrem fora dela
+    const alvo = ' target="_self"'; // as abas ficam na página; os outros links abrem em nova guia (<base>)
     const nav = abas ? `<nav class="abas" aria-label="${esc(_('Seções do site'))}">${abas.map(a => `<a href="#${a.id}"${alvo}>${esc(a.nome)}</a>`).join('')}</nav>` : '';
     const conteudo = abas
       ? abas.map(a => `<div class="aba aba-${a.id}">${a.html}</div>`).join('')
@@ -527,7 +527,7 @@ ${d.url ? `<meta property="og:url" content="${esc(d.url)}">` : ''}
 ${cardHtml(versoes[0][0])}
 ${opcoes.previa ? '' : dadoEstruturado(d)}
 <link rel="icon" href="${favicon(d.nome, Tema.variaveis(ap)['--acento'])}">
-${opcoes.previa ? '<base target="_blank">' : ''}
+<base target="_blank">
 ${fontes}
 <style id="tema">${Tema.css(ap)}</style>
 ${foto}
