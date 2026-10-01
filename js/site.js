@@ -6,10 +6,12 @@
   const Tema = raiz.Tema || (typeof require === 'function' ? require('./tema.js') : null);
   const I18n = raiz.I18n || (typeof require === 'function' ? require('./i18n.js') : null);
   const Ingles = raiz.Ingles || (typeof require === 'function' ? require('./ingles.js') : null);
-  const api = fabrica(Tema, I18n, Ingles);
+  // O currículo (cv.js) usa os utilitários de texto daqui; cada módulo pega o outro na hora de usar.
+  const Cv = () => raiz.Cv || (typeof require === 'function' ? require('./cv.js') : null);
+  const api = fabrica(Tema, I18n, Ingles, Cv);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else raiz.Site = api;
-})(typeof self !== 'undefined' ? self : this, function (Tema, I18n, Ingles) {
+})(typeof self !== 'undefined' ? self : this, function (Tema, I18n, Ingles, Cv) {
   'use strict';
 
   const _ = I18n._;
@@ -58,6 +60,8 @@
     'Assessoria e consultoria': 'Assessoria e consultoria',
     'Cursos de curta duração ministrados': 'Cursos de curta duração ministrados',
     'Demais tipos de produção técnica': 'Outras produções técnicas',
+    // ensino: as disciplinas vêm das atividades da Atuação Profissional (ver lattes.js)
+    'Disciplinas ministradas': 'Disciplinas ministradas',
     // Grupos sem subtítulo (com subtítulo, o leitor do Lattes compõe "Orientações concluídas: Mestrado").
     'Orientações e supervisões concluídas': 'Orientações concluídas',
     'Orientações e supervisões em andamento': 'Orientações em andamento',
@@ -115,6 +119,9 @@
     'Assessoria e consultoria': 'Consulting',
     'Cursos de curta duração ministrados': 'Short courses taught',
     'Outras produções técnicas': 'Other technical output',
+    'Disciplinas ministradas': 'Courses taught',
+    'Aulas ministradas': 'Lectures',
+    'Material didático': 'Teaching materials',
     'Orientações concluídas': 'Completed advising',
     'Orientações em andamento': 'Ongoing advising',
     'Bancas': 'Committees',
@@ -139,7 +146,9 @@
     'Trajetória': 'Background',
     'Pesquisa': 'Research',
     'Produção': 'Publications',
+    'Ensino': 'Teaching',
     'Orientações': 'Advising',
+    'CV': 'CV',
     'Destaques': 'Highlights',
     'Interesses': 'Interests',
     'Seções do site': 'Site sections',
@@ -192,6 +201,8 @@
     'Nome do projeto de pesquisa que você coordena': 'Name of the research project you lead',
     'Coordenação': 'Coordinator',
     '2024 - Atual': '2024 - Present',
+    'Uma disciplina que você ministra; Outra disciplina': 'A course you teach; Another course',
+    'Área do curso (Graduação)': 'Field of the program (Undergraduate)',
     'Título de um artigo publicado número {n}': 'Title of a published article number {n}',
   });
 
@@ -216,13 +227,32 @@
     return t ? t[1] : (TITULOS_CURTOS[tituloSecao] || tituloSecao || '');
   }
 
-  // Abas do layout "em abas", pelo id da seção no Lattes. "Início" (sobre e destaques) vem antes.
+  // Abas do layout "em abas", pelo id da seção no Lattes. "Início" (sobre e destaques) vem antes, e o
+  // CV (cv.js), depois de todas.
   const ABAS = [
     { id: 'trajetoria', nome: 'Trajetória' }, // formação, atuação, prêmios e tudo o que não cair nas outras
-    { id: 'pesquisa', nome: 'Pesquisa', secoes: /^(LinhaPesquisa|Projetos|OutrosProjetos)/ },
+    { id: 'pesquisa', nome: 'Pesquisa', secoes: /^(LinhaPesquisa|Projetos(?!Ensino)|OutrosProjetos)/ },
     { id: 'producao', nome: 'Produção', secoes: /^(ProducoesCientificas|Eventos)/ },
+    { id: 'ensino', nome: 'Ensino', secoes: /^(AtividadesEnsino|ProjetosEnsino|Ensino:)/ },
     { id: 'orientacoes', nome: 'Orientações', secoes: /^(Orientacoes|Bancas)/ },
   ];
+
+  // Cursos curtos, aulas e material didático: o Lattes os registra como produção técnica ("Demais
+  // tipos de produção técnica", com o tipo entre parênteses no fim da referência), mas no site são
+  // ensino. Saem da seção de origem e vão, em seções próprias, para a aba Ensino. O item continua
+  // na seção de origem no construtor, então as escolhas e as edições dele não mudam.
+  const ENSINO_TECNICO = [
+    [/\(Curso de curta duração ministrado\b/i, 'Cursos de curta duração ministrados'],
+    [/\(Aula\b/i, 'Aulas ministradas'],
+    [/\(Desenvolvimento de material didático/i, 'Material didático'],
+  ];
+
+  function ensinoTecnico(s, it) {
+    if (s.tipo !== 'producao' || !/^ProducoesCientificas:/.test(s.id || '')) return null;
+    const texto = it.tituloOriginal != null ? it.tituloOriginal : it.titulo;
+    const e = ENSINO_TECNICO.find(([re]) => re.test(texto || ''));
+    return e ? e[1] : null;
+  }
 
   function abaDaSecao(id) {
     const aba = ABAS.find(a => a.secoes && a.secoes.test(id || ''));
@@ -244,10 +274,18 @@
     const secoes = [];
     const destaques = [];
     const noIdioma = []; // as seções com só o que fica no site, já no idioma: base do resumo de formação
+    const ensino = {}; // título da seção de ensino -> itens tirados da produção técnica (ver ENSINO_TECNICO)
     for (const s of estado.secoes) {
-      const itens = s.itens.filter(i => i.manter).map(i => itemNoIdioma(s, i, en));
+      let itens = s.itens.filter(i => i.manter).map(i => itemNoIdioma(s, i, en));
       noIdioma.push(Object.assign({}, s, { itens }));
       if (s.id === 'AreasAtuacao' && interessesPt.length) continue; // já aparecem como interesses, no início
+      itens = itens.filter(i => {
+        const titulo = ensinoTecnico(s, i);
+        if (!titulo) return true;
+        (ensino[titulo] || (ensino[titulo] = [])).push(i);
+        if (i.destaque) destaques.push(Object.assign({}, i, { categoria: tipoDe(s.titulo) }));
+        return false;
+      });
       if (!itens.length) continue;
       // Destaques livres (fora do Lattes: um software, um projeto, um site) só existem como cartões.
       // A categoria é texto da pessoa (categoriaLivre), e não um rótulo do construtor.
@@ -259,7 +297,15 @@
         continue;
       }
       itens.forEach(i => { if (i.destaque) destaques.push(Object.assign({}, i, { categoria: tipoDe(s.titulo) })); });
-      secoes.push({ titulo: TITULOS_CURTOS[s.titulo] || s.titulo, tipo: s.tipo, aba: abaDaSecao(s.id), itens });
+      secoes.push({ id: s.id, titulo: TITULOS_CURTOS[s.titulo] || s.titulo, tipo: s.tipo, aba: abaDaSecao(s.id), itens });
+    }
+    // As seções de ensino tiradas da produção técnica entram depois das outras de ensino (no site em
+    // página única, a ordem é esta), ou no fim.
+    const novas = ENSINO_TECNICO.filter(([, titulo]) => ensino[titulo])
+      .map(([, titulo]) => ({ id: 'Ensino:' + titulo, titulo, tipo: 'producao', aba: 'ensino', itens: ensino[titulo] }));
+    if (novas.length) {
+      const ultima = secoes.map(s => s.aba).lastIndexOf('ensino');
+      secoes.splice(ultima < 0 ? secoes.length : ultima + 1, 0, ...novas);
     }
     // Na ordem que a pessoa escolheu; sem ordem definida, os mais recentes primeiro.
     destaques.sort((a, b) => ordemDe(a) - ordemDe(b) || (b.periodo || '').localeCompare(a.periodo || ''));
@@ -293,8 +339,9 @@
   // Um item do Lattes (ou um destaque livre) no idioma do site. Em português, volta como está. Em inglês,
   // vale o que a pessoa escreveu (tituloEn, detalheEn, descricaoEn, obsEn, dTextoEn; nos livres, dTituloEn,
   // dVeiculoEn e categoriaEn); sem isso, as regras de ingles.js cuidam do grau da formação ("Doutorado
-  // em Direito" -> "PhD in Law") e da linha de instituição ("Universidade de São Paulo, USP, Brasil" ->
-  // "University of São Paulo, USP"); e o resto fica em português, inteiro. As produções (referências
+  // em Direito" -> "PhD in Law"), do curso das disciplinas ministradas e da linha de instituição
+  // ("Universidade de São Paulo, USP, Brasil" -> "University of São Paulo, USP"); e o resto fica em
+  // português, inteiro. As produções (referências
   // bibliográficas) e as orientações não mudam: são registros, no idioma em que foram publicados.
   function itemNoIdioma(s, i, en) {
     if (!en) return i;
@@ -305,11 +352,13 @@
       t.dVeiculo = ou(i.dVeiculoEn, i.dVeiculo);
       t.categoria = ou(i.categoriaEn, i.categoria);
     } else if (s.tipo !== 'producao') {
-      t.titulo = ou(i.tituloEn, /^FormacaoAcademica/.test(s.id || '') ? Ingles.grauEmIngles(i.titulo) : i.titulo);
+      const idiomas = s.id === 'Idiomas'; // "Inglês" / "Compreende Bem, Fala Bem..."
+      t.titulo = ou(i.tituloEn, /^FormacaoAcademica/.test(s.id || '') ? Ingles.grauEmIngles(i.titulo) : idiomas ? Ingles.linguaEmIngles(i.titulo) : i.titulo);
       // Nos projetos, o detalhe é o papel da pessoa ("Coordenador"), que o site traduz como rótulo.
-      if (!i.integrantes) t.detalhe = ou(i.detalheEn, linhaInstituicao(i.detalhe, true, false));
+      if (!i.integrantes) t.detalhe = ou(i.detalheEn, idiomas ? Ingles.proficienciaEmIngles(i.detalhe) : linhaInstituicao(i.detalhe, true, false));
       if (i.descricao) t.descricao = ou(i.descricaoEn, i.descricao);
-      if (i.obs) t.obs = ou(i.obsEn, i.obs);
+      // Nas disciplinas ministradas, o complemento é o curso: "Direito (Graduação)" -> "Law (Undergraduate)".
+      if (i.obs) t.obs = ou(i.obsEn, s.id === 'AtividadesEnsino' ? Ingles.cursoEmIngles(i.obs) : i.obs);
       if (i.bolsa) t.bolsa = linhaInstituicao(i.bolsa, true, false);
     }
     t.dTexto = ou(i.dTextoEn, i.dTexto);
@@ -431,14 +480,17 @@
           },
         ],
         secoes: [
-          { titulo: 'Formação', aba: 'trajetoria', itens: [
+          { id: 'FormacaoAcademicaTitulacao', titulo: 'Formação', aba: 'trajetoria', itens: [
             { periodo: '2019 - 2023', titulo: doutorado, detalhe: federal, obs: _('Título da tese') },
             { periodo: '2016 - 2018', titulo: mestrado, detalhe: estadual },
           ] },
-          { titulo: 'Projetos de pesquisa', aba: 'pesquisa', itens: [
+          { id: 'ProjetosPesquisa', titulo: 'Projetos de pesquisa', aba: 'pesquisa', itens: [
             { periodo: _('2024 - Atual'), titulo: _('Nome do projeto de pesquisa que você coordena'), detalhe: _('Coordenação') },
           ] },
-          { titulo: 'Artigos em periódicos', tipo: 'producao', aba: 'producao', itens: [2025, 2024, 2022, 2021, 2020, 2019, 2018].map((ano, i) => {
+          { id: 'AtividadesEnsino', titulo: 'Disciplinas ministradas', aba: 'ensino', itens: [
+            { periodo: _('2024 - Atual'), titulo: _('Uma disciplina que você ministra; Outra disciplina'), detalhe: federal, obs: _('Área do curso (Graduação)') },
+          ] },
+          { id: 'ProducoesCientificas:Artigos completos publicados em periódicos', titulo: 'Artigos em periódicos', tipo: 'producao', aba: 'producao', itens: [2025, 2024, 2022, 2021, 2020, 2019, 2018].map((ano, i) => {
             const obra = _('Título de um artigo publicado número {n}', { n: i + 1 });
             return {
               periodo: String(ano), titulo: `${autoria}. ${obra}. ${revista}, v. ${i + 3}, ${ano}.`, negrito: autoria,
@@ -470,12 +522,14 @@
 
   // Um site inteiro (cabeçalho, corpo, rodapé) no idioma ativo. `seletor` é o botão PT/EN, quando há.
   function corpoSite(d, ap, opcoes, seletor = '') {
-    const abas = ap.layout === 'abas' ? montarAbas(d, ap.estrutura, ap.referencias === 'completas') : null;
+    const abas = ap.layout === 'abas' ? montarAbas(d, ap, opcoes) : null;
     const alvo = ' target="_self"'; // as abas ficam na página; os outros links abrem em nova guia (<base>)
     const nav = abas ? `<nav class="abas" aria-label="${esc(_('Seções do site'))}">${abas.map(a => `<a href="#${a.id}"${alvo}>${esc(a.nome)}</a>`).join('')}</nav>` : '';
+    // Em página única, o CV fica no fim só como botão: o currículo inteiro repetiria a página.
     const conteudo = abas
       ? abas.map(a => `<div class="aba aba-${a.id}">${a.html}</div>`).join('')
-      : (ap.estrutura === 'topo' ? apresentacao(d) : inicio(d)) + d.secoes.map(s => secao(s, ap.referencias === 'completas', d.nome)).join('');
+      : (ap.estrutura === 'topo' ? apresentacao(d) : inicio(d)) + d.secoes.map(s => secao(s, ap.referencias === 'completas', d.nome)).join('') +
+        (temCv(d, ap) ? htmlCv(d, opcoes, false) : '');
     const classes = ['site', `estrutura-${ap.estrutura}`, `foto-${ap.foto}`, abas ? 'com-abas' : ''].join(' ');
 
     let corpo;
@@ -509,6 +563,7 @@
       : '';
     const partes = versoes.map(([id, dv]) => [id, I18n.com(id, () => corpoSite(dv, ap, opcoes, seletor))]);
     const abas = partes[0][1].abas;
+    const cv = temCv(d, ap) ? Cv().CSS + (abas ? CSS_IMPRIMIR_CV : '') : '';
     // A foto entra uma vez só, como variável CSS: as versões em dois idiomas compartilham a mesma imagem.
     const foto = d.foto ? `<style id="foto">${cssFoto(d, ap)}</style>` : '';
 
@@ -532,7 +587,7 @@ ${opcoes.previa ? '' : `<link rel="apple-touch-icon" href="${imagemIniciais(d.no
 ${fontes}
 <style id="tema">${Tema.css(ap)}</style>
 ${foto}
-<style>${CSS}${abas ? cssAbas(abas) : ''}${ambos ? CSS_IDIOMAS : ''}${opcoes.previa ? 'html{scrollbar-width:thin}' : ''}</style>
+<style>${CSS}${abas ? cssAbas(abas) : ''}${cv}${ambos ? CSS_IDIOMAS : ''}${opcoes.previa ? 'html{scrollbar-width:thin}' : ''}</style>
 </head>
 <body>
 ${abas ? abas.map(a => `<span class="alvo" id="${a.id}"></span>`).join('') : ''}
@@ -590,6 +645,13 @@ ${opcoes.dadosConstrutor ? `<script type="application/json" id="dados-do-constru
     if (perfis.length) pessoa.sameAs = perfis;
     return `<script type="application/ld+json">${JSON.stringify(pessoa).replace(/</g, '\\u003c')}</script>`;
   }
+
+  // Imprimir com a aba CV aberta imprime só o currículo, sem o menu, o perfil e o rodapé do site.
+  const CSS_IMPRIMIR_CV = `
+@media print{
+#cv:target~.site .lateral,#cv:target~.site .perfil,#cv:target~.site .abas,#cv:target~.site .barra-topo,#cv:target~.site .rodape,#cv:target~.site .cv>h2{display:none}
+#cv:target~.site .pagina{display:block;max-width:none;padding:0}
+}`;
 
   // Site em dois idiomas: sem JavaScript, fica o português; com ele, começa no idioma do navegador
   // do visitante e lembra a escolha do botão (no próprio navegador dele, sem enviar nada). É a única
@@ -660,15 +722,29 @@ document.addEventListener('click',function(e){var b=e.target.closest&&e.target.c
   }
 
   // Sem conteúdo em pelo menos duas abas, o site fica em página única mesmo.
-  function montarAbas(d, estrutura, completas) {
+  function montarAbas(d, ap, opcoes) {
+    const completas = ap.referencias === 'completas';
     const abas = [];
-    const htmlInicio = estrutura === 'topo' ? apresentacao(d) : inicio(d);
+    const htmlInicio = ap.estrutura === 'topo' ? apresentacao(d) : inicio(d);
     if (htmlInicio.trim()) abas.push({ id: 'inicio', nome: _('Início'), html: htmlInicio });
     for (const a of ABAS) {
       const secoes = d.secoes.filter(s => s.aba === a.id);
       if (secoes.length) abas.push({ id: a.id, nome: _(a.nome), html: secoes.map(s => secao(s, completas, d.nome)).join('') });
     }
+    if (temCv(d, ap)) abas.push({ id: 'cv', nome: _('CV'), html: htmlCv(d, opcoes, true) });
     return abas.length >= 2 ? abas : null;
+  }
+
+  // A aba (ou, em página única, a seção) do currículo em formato neutro, com o botão do PDF. O PDF
+  // vem pronto em opcoes.cvPdf, um por idioma (o construtor o gera antes, ver Cv.arquivo); na prévia,
+  // o botão fica sem arquivo e o construtor gera o PDF na hora do clique.
+  function temCv(d, ap) {
+    return ap.cv !== 'nao' && !!(d.secoes.length || d.bio);
+  }
+
+  function htmlCv(d, opcoes, papel) {
+    const pdf = (opcoes.cvPdf && opcoes.cvPdf[I18n.idioma()]) || null;
+    return Cv().html(Cv().modelo(d), { pdf, papel });
   }
 
   // As abas funcionam só com CSS (:target), sem JavaScript: cada aba tem um endereço
@@ -826,7 +902,7 @@ ${cada(id => `.abas a[href="#${id}"]`)}{color:var(--texto);border-color:var(--ac
     const texto = modo === 'lista' ? Object.assign({}, it, { titulo: capsParaTitulo(it.titulo || '') }) : it;
     return `
       <li>
-        <span class="quando">${esc(it.periodo || '')}</span>
+        <span class="quando">${esc(periodoEmAnos(it.periodo))}</span>
         <div>
           <p class="item-titulo">${citacao(texto)}</p>
           ${it.detalhe ? `<p class="item-detalhe">${esc(it.integrantes ? _(it.detalhe) : capsParaTitulo(it.detalhe))}</p>` : ''}
@@ -837,6 +913,17 @@ ${cada(id => `.abas a[href="#${id}"]`)}{color:var(--texto);border-color:var(--ac
           ${financiamento(it.financiadores)}
         </div>
       </li>`;
+  }
+
+  // As disciplinas ministradas vêm com mês ("08/2014 - 12/2016"), que não cabe na coluna das datas:
+  // no site, como nas outras seções, ficam os anos ("2014 - 2016"; "2019", quando começa e termina
+  // no mesmo ano). O CV mostra os meses.
+  function periodoEmAnos(periodo) {
+    const p = String(periodo || '');
+    if (!/\b\d{2}\/\d{4}\b/.test(p)) return p;
+    const anos = p.replace(/\b\d{2}\/(\d{4})\b/g, '$1');
+    const m = anos.match(/^(\d{4})\s*-\s*(\d{4})$/);
+    return m && m[1] === m[2] ? m[1] : anos;
   }
 
   // Texto longo por inteiro: a descrição do projeto e as "Outras informações" do vínculo
@@ -1076,5 +1163,5 @@ details[open]>summary{display:none}
   .sobre p,.destaque-texto{text-align:start}
 }`;
 
-  return { dados, exemplo, html, cssFoto, subtituloPadrao, interessesPadrao, textoComLinks, textoPuro, camposDestaque, tipoDe, itemNoIdioma };
+  return { dados, exemplo, html, cssFoto, subtituloPadrao, interessesPadrao, textoComLinks, textoPuro, camposDestaque, tipoDe, itemNoIdioma, aspas, capsParaTitulo, urlSegura };
 });

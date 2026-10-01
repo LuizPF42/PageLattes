@@ -176,6 +176,13 @@
 
       if (itens.length) secoes.push({ id: idSecao, titulo, tipo: 'lista', itens });
       else if (limpa(bloco.textContent).length > titulo.length + 20) avisos.push(_('Não consegui ler a seção “{titulo}”.', { titulo }));
+
+      // As disciplinas ministradas ficam nas "Atividades" dos vínculos: viram uma seção própria,
+      // que no site vai para a aba Ensino.
+      if (idSecao === 'AtuacaoProfissional') {
+        const aulas = ensino(bloco);
+        if (aulas.length) secoes.push({ id: 'AtividadesEnsino', titulo: 'Disciplinas ministradas', tipo: 'lista', itens: aulas });
+      }
     }
 
     for (const s of secoes) for (const it of s.itens) it.id = hash([s.id, it.periodo, it.titulo, it.detalhe].join('|'));
@@ -271,6 +278,54 @@
       if (it.titulo === it.obs) it.obs = '';
     }
     return itens;
+  }
+
+  // As atividades de ensino de cada vínculo. O Lattes escreve "Ensino, Direito, Nível: Graduação" ao
+  // lado do período e, na linha seguinte, "Disciplinas ministradas" e uma disciplina por linha. Cada
+  // atividade vira um item: as disciplinas no título, a instituição no detalhe e o curso, com o nível,
+  // no complemento ("Direito (Graduação)"). As outras atividades (direção, pesquisa, conselhos,
+  // estágios) repetem o vínculo ou os projetos e ficam de fora, como antes.
+  function ensino(bloco) {
+    const atividades = [];
+    const seq = sequencia(bloco);
+    let inst = '';
+    let emAtividades = false;
+    let atual = null;
+    seq.forEach((e, i) => {
+      if (e.tipo === 'inst') { inst = instituicao(e.texto); emAtividades = false; atual = null; return; }
+      if (e.tipo !== 'rotulo') return;
+      if (e.sub) { emAtividades = /^Atividades/i.test(e.texto); atual = null; return; }
+      if (!emAtividades) return;
+      const prox = seq[i + 1];
+      const linhasConteudo = prox && prox.tipo === 'conteudo' ? prox.linhas : [];
+      if (e.texto) {
+        const m = (linhasConteudo[0] || '').match(/^Ensino\s*,\s*(.*?)\s*\.?$/i);
+        const [, curso = '', nivel = ''] = m ? m[1].match(/^(.*?)(?:\s*,?\s*Nível:\s*(.*))?$/i) : [];
+        atual = m ? { periodo: e.texto, inst, curso: semPonto(curso), nivel: semPonto(nivel), disciplinas: [] } : null;
+        if (atual) atividades.push(atual);
+      } else if (atual) {
+        const j = linhasConteudo.findIndex(l => /^Disciplinas ministradas/i.test(l));
+        if (j >= 0) atual.disciplinas.push(...linhasConteudo.slice(j + 1).map(semPonto).filter(Boolean));
+      }
+    });
+    // Do mais recente para o mais antigo, com o que está em andamento primeiro (o Lattes agrupa por
+    // instituição; numa lista de ensino, a ordem que importa é a do tempo).
+    const data = s => { const m = String(s || '').match(/(?:(\d{2})\/)?(\d{4})/); return m ? Number(m[2]) * 100 + Number(m[1] || 0) : 0; };
+    const fim = p => (/Atual/i.test(p) ? 999999 : data(String(p).split(/\s-\s/)[1]));
+    atividades.sort((a, b) => fim(b.periodo) - fim(a.periodo) || data(b.periodo) - data(a.periodo));
+    return atividades.map(a => {
+      const curso = cursoComNivel(a.curso, a.nivel);
+      const disciplinas = a.disciplinas.join('; ');
+      return item({ periodo: a.periodo, titulo: disciplinas || curso, detalhe: a.inst, obs: disciplinas ? curso : '' });
+    }).filter(it => it.titulo);
+  }
+
+  // "Direito" + "Graduação" -> "Direito (Graduação)"; o nível não se repete quando o curso já o diz
+  // ("Especialização em Direito Tributário").
+  function cursoComNivel(curso, nivel) {
+    const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[-\s]+/g, ' ');
+    if (!nivel || !curso) return curso || nivel;
+    return norm(curso).includes(norm(nivel)) ? curso : `${curso} (${nivel})`;
   }
 
   // Projetos, linhas de pesquisa, formação complementar, revisor de periódico, áreas,

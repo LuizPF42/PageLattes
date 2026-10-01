@@ -97,7 +97,7 @@ O site pode sair em português, em inglês ou nos dois, com um botão PT/EN para
 
 O PageLattes **não traduz automaticamente**. Tradutor nenhum acerta nomes de curso, de instituição e de projeto com a segurança que um currículo pede, e um site meio traduzido é pior que um site em português. Então ele faz só o que dá para fazer com certeza, e deixa o resto com você:
 
-- **O que é fixo sai em inglês por regra**: os títulos das seções e das abas, os tipos de produção, o grau da formação ("Doutorado em Física" vira "PhD in Physics"), os países e os nomes de instituição que ele conhece ("Universidade de São Paulo" vira "University of São Paulo"). Quando não conhece todas as palavras, deixa em português, inteiro.
+- **O que é fixo sai em inglês por regra**: os títulos das seções e das abas, os tipos de produção, o grau da formação ("Doutorado em Física" vira "PhD in Physics"), o curso das disciplinas ministradas, os idiomas e a proficiência ("Inglês: Lê Bem" vira "English: Reads well"), os países e os nomes de instituição que ele conhece ("Universidade de São Paulo" vira "University of São Paulo"). Quando não conhece todas as palavras, deixa em português, inteiro.
 - **O que é seu, você escreve.** Na etapa Conteúdo aparecem campos "Em inglês" ao lado da apresentação, da linha abaixo do nome, dos interesses e da frase de cada destaque. Em cada item do currículo, o lápis abre também os campos em inglês e mostra o que sairia sem eles.
 - **O que ficar vazio aparece em português.** As produções e as orientações não mudam de idioma: são registros, e ficam como foram publicados.
 
@@ -106,6 +106,22 @@ O PageLattes **não traduz automaticamente**. Tradutor nenhum acerta nomes de cu
 ![O lápis de um item da formação: o texto em português, os campos em inglês e a dica do que o site mostraria sem eles](prints/item-ingles.png)
 
 ![O mesmo site em inglês, com o botão PT/EN no canto](prints/site-ingles.png)
+
+## Ensino
+
+As disciplinas que você ministrou ganham uma aba própria, **Ensino** (*Teaching*, no site em inglês). Elas vêm do próprio Lattes: das "Atividades" de cada vínculo da Atuação Profissional, onde o currículo registra o período, a instituição, o curso, o nível e as disciplinas ("Ensino, Direito, Nível: Graduação"). Cada atividade vira um item, com as disciplinas no título, a instituição embaixo e o curso, como "Direito (Graduação)", no lápis, onde dá para corrigir.
+
+Entram na mesma aba os projetos de ensino e o que o Lattes guarda como produção técnica, mas é aula: os cursos de curta duração ministrados, as aulas e o material didático. No construtor, esses itens continuam na seção de origem ("Demais tipos de produção técnica"); só no site eles mudam de lugar.
+
+## Currículo em PDF
+
+O site sai também com uma aba **CV**: o mesmo conteúdo, num currículo em formato neutro, no padrão que se usa fora do Brasil. É o modelo de duas colunas, com as datas à esquerda, os títulos de seção em maiúsculas, Times em preto sobre branco e as seções na ordem de um currículo acadêmico (formação, experiência, ensino, pesquisa, publicações, apresentações, orientações, prêmios, idiomas). Quem visita lê ali mesmo, no computador ou no celular, e baixa o **PDF** em A4 com um clique. Imprimir com a aba aberta também imprime só o currículo.
+
+- **O PDF vai dentro do `index.html`.** O construtor gera o arquivo no seu navegador, sem servidor nenhum, e o embute no site. Continua sendo um arquivo só para enviar ao GitHub.
+- **O conteúdo é o do site**: só o que você manteve, com as suas edições. As produções aparecem com a referência completa, e o seu nome em negrito. Mudou algo? Baixe o `index.html` de novo e o PDF vem junto, atualizado.
+- **Em inglês, sai em inglês.** No site em dois idiomas há um CV para cada um, com os rótulos e os campos "Em inglês" que você preencheu, pela mesma regra do resto do site.
+- **Para ter o PDF à mão**, para mandar por e-mail, use o botão da etapa Publicar ou o da aba CV na Revisão.
+- **Não quer?** Escolha "Sem o CV" na Aparência ou na Revisão.
 
 ## Seus dados ficam com você
 
@@ -131,9 +147,11 @@ e abra `http://localhost:8765`.
 | `js/app.js` | As telas, o estado e o fluxo entre as etapas. O progresso fica no `localStorage`. |
 | `js/lattes.js` | O leitor da página pública do Lattes. Foi construído e testado sobre páginas reais de currículos, de perfis variados. |
 | `js/site.js` | Gera o HTML do site final. As escolhas vão embutidas num `<script type="application/json">`, que é o que a etapa Atualizar relê. |
+| `js/cv.js` | O currículo em formato neutro: monta, a partir do conteúdo do site, o modelo que vira a aba CV (HTML) e o PDF. |
+| `js/pdf.js` | Um gerador de PDF mínimo, sem dependências: páginas A4, as quatro Times padrão do PDF (nenhuma fonte embutida), links e compressão pelo próprio navegador (`CompressionStream`). |
 | `js/tema.js` | Fundos, cores (com ajuste automático de contraste), fontes e estruturas. |
 | `js/i18n.js` | O idioma da interface. |
-| `js/ingles.js` | As regras do site em inglês: grau da formação, país e nome de instituição. Só vocabulário fechado; não há tradução automática. |
+| `js/ingles.js` | As regras do site em inglês: grau da formação, curso das disciplinas ministradas, idiomas, país e nome de instituição. Só vocabulário fechado; não há tradução automática. |
 | `fonts/` | As fontes, com as licenças ao lado. O site final embute só o par escolhido. |
 | `prints/` | Os prints deste README e os scripts que geram as imagens: `gerar.js` (os prints) e `gerar-og.py` (o card de compartilhamento). |
 | `og.png`, `og-en.png` | O card 1200×630 genérico dos sites gerados até setembro de 2026. Os sites novos têm card próprio, mas os já publicados ainda apontam para estes arquivos. |
@@ -143,7 +161,7 @@ e abra `http://localhost:8765`.
 
 O construtor está em português e em inglês (botões PT / EN no cabeçalho). Os textos são escritos em português no código; as traduções ficam em blocos `I18n.registrar` no início de cada módulo, e `js/i18n.js` explica o mecanismo.
 
-O **site gerado** pode sair em português, em inglês ou nos dois, com um botão PT/EN para o visitante; a escolha é feita na etapa Aparência. **Não há tradução automática.** Em inglês, sai traduzido só o que tem vocabulário fechado: os rótulos do site (abas, títulos de seção, tipos de produção), o grau da formação ("Doutorado em" vira "PhD in"), os países e os nomes de instituição que `js/ingles.js` conhece por regra. Tudo o mais fica em português, a não ser o que a pessoa escrever em inglês na etapa Conteúdo: a apresentação, a linha abaixo do nome, os interesses, o texto de cada destaque e, item a item, o texto, o detalhe e a descrição de cada registro fora das produções. O que ficar vazio aparece em português. As produções (referências bibliográficas) e as orientações não mudam de idioma: são registros, no idioma em que foram publicados.
+O **site gerado** pode sair em português, em inglês ou nos dois, com um botão PT/EN para o visitante; a escolha é feita na etapa Aparência. **Não há tradução automática.** Em inglês, sai traduzido só o que tem vocabulário fechado: os rótulos do site (abas, títulos de seção, tipos de produção), o grau da formação ("Doutorado em" vira "PhD in"), o curso das disciplinas ministradas ("Direito (Graduação)" vira "Law (Undergraduate)"), os idiomas e a proficiência da seção Idiomas, os países e os nomes de instituição que `js/ingles.js` conhece por regra. Tudo o mais fica em português, a não ser o que a pessoa escrever em inglês na etapa Conteúdo: a apresentação, a linha abaixo do nome, os interesses, o texto de cada destaque e, item a item, o texto, o detalhe e a descrição de cada registro fora das produções. O que ficar vazio aparece em português. As produções (referências bibliográficas) e as orientações não mudam de idioma: são registros, no idioma em que foram publicados.
 
 > **Tradução por IA: estacionada.** O construtor chegou a traduzir a apresentação e os destaques com um modelo rodando dentro do navegador. Isso foi retirado em 2026-09-12 e está guardado em [`parked/`](parked/), com o código, o motivo e os números medidos em 214 currículos reais: o conteúdo do Lattes não traduz bem nem por regras nem pela metade, e a versão escrita pela própria pessoa é a única honesta. O histórico, e o que voltou depois, estão em [`parked/README.md`](parked/README.md).
 

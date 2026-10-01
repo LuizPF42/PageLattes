@@ -1,7 +1,8 @@
 /*
  * Inglês por regras, para o site gerado em inglês: prefixo do grau ("Doutorado em X" -> "PhD in X"),
- * países ("Estados Unidos" -> "United States") e nomes de instituição ("Universidade Federal de
- * Minas Gerais" -> "Federal University of Minas Gerais").
+ * curso das disciplinas ministradas ("Direito (Graduação)" -> "Law (Undergraduate)"), idiomas
+ * ("Inglês: Lê Bem" -> "English: Reads well"), países ("Estados Unidos" -> "United States") e nomes
+ * de instituição ("Universidade Federal de Minas Gerais" -> "Federal University of Minas Gerais").
  *
  * Não há tradução automática de texto aqui, nem em lugar nenhum do PageLattes: o vocabulário destas
  * regras é fechado (graus, países, palavras que formam nome de instituição e algumas áreas), e o que
@@ -55,6 +56,61 @@
     const parentese = m[2] ? m[2].trim() : '';
     const en = (principal ? areaEmInglesInteira(principal) || principal : '') + (parentese ? ` (${areaEmInglesInteira(parentese) || parentese})` : '');
     return (g[1] + en).replace(/\sin $/, '').trim();
+  }
+
+  // ---------- curso das disciplinas ministradas ----------
+
+  // O nível de ensino, como o Lattes escreve nas atividades de ensino.
+  const NIVEIS = {
+    'graduação': 'Undergraduate', 'pós-graduação': 'Graduate', 'pós graduação': 'Graduate', 'especialização': 'Specialization',
+    'aperfeiçoamento': 'Professional development', 'mestrado': "Master's", 'doutorado': 'Doctoral', 'extensão': 'Extension',
+    'ensino médio': 'High school', 'ensino fundamental': 'Primary school', 'educação profissional': 'Vocational education',
+  };
+
+  // "Direito (Graduação)" -> "Law (Undergraduate)"; "Especialização em Direito Tributário" ->
+  // "Specialization in Tax Law". Como no grau da formação, a área só sai em inglês quando todas as
+  // palavras têm regra ("Escola de Formação (Graduate)" fica com o nome em português).
+  function cursoEmIngles(curso) {
+    const t = String(curso || '').trim();
+    if (GRAUS.some(([re]) => re.test(t))) return grauEmIngles(t);
+    const m = t.match(/^(.*?)\s*\(([^)]*)\)$/);
+    const nome = m ? m[1] : t;
+    const nivel = m ? NIVEIS[m[2].trim().toLowerCase()] : '';
+    const nomeEn = NIVEIS[nome.toLowerCase()] || areaEmInglesInteira(nome) || nome;
+    return m ? `${nomeEn} (${nivel || m[2]})` : nomeEn;
+  }
+
+  // ---------- idiomas ----------
+
+  // A seção Idiomas do Lattes: o nome da língua e a proficiência em quatro habilidades, sempre com as
+  // mesmas palavras ("Compreende Bem, Fala Razoavelmente, Lê Bem, Escreve Pouco").
+  const LINGUAS = {
+    'Inglês': 'English', 'Português': 'Portuguese', 'Espanhol': 'Spanish', 'Francês': 'French', 'Italiano': 'Italian',
+    'Alemão': 'German', 'Chinês': 'Chinese', 'Mandarim': 'Mandarin', 'Japonês': 'Japanese', 'Coreano': 'Korean',
+    'Russo': 'Russian', 'Árabe': 'Arabic', 'Hebraico': 'Hebrew', 'Latim': 'Latin', 'Grego': 'Greek', 'Holandês': 'Dutch',
+    'Norueguês': 'Norwegian', 'Dinamarquês': 'Danish', 'Sueco': 'Swedish', 'Finlandês': 'Finnish', 'Polonês': 'Polish',
+    'Húngaro': 'Hungarian', 'Tcheco': 'Czech', 'Romeno': 'Romanian', 'Ucraniano': 'Ukrainian', 'Turco': 'Turkish',
+    'Catalão': 'Catalan', 'Galego': 'Galician', 'Basco': 'Basque', 'Persa': 'Persian', 'Hindi': 'Hindi',
+    'Esperanto': 'Esperanto', 'Guarani': 'Guarani', 'Libras': 'Brazilian Sign Language (Libras)',
+  };
+  const HABILIDADES = { Compreende: 'Understands', Fala: 'Speaks', 'Lê': 'Reads', Escreve: 'Writes' };
+  const GRAUS_LINGUA = { Bem: 'well', Razoavelmente: 'reasonably', Pouco: 'a little' };
+
+  function linguaEmIngles(nome) {
+    const t = String(nome || '').trim();
+    return LINGUAS[t] || t;
+  }
+
+  // "Compreende Bem, Fala Pouco" -> "Understands well, speaks a little". Uma parte fora do padrão
+  // deixa a linha inteira em português.
+  function proficienciaEmIngles(texto) {
+    const t = String(texto || '').trim();
+    const partes = t.split(/\s*,\s*/).filter(Boolean).map(p => {
+      const m = p.match(/^(\S+)\s+(\S+?)\.?$/);
+      return m && HABILIDADES[m[1]] && GRAUS_LINGUA[m[2]] ? `${HABILIDADES[m[1]]} ${GRAUS_LINGUA[m[2]]}` : null;
+    });
+    if (!partes.length || partes.includes(null)) return t;
+    return partes.map((p, i) => (i ? p.toLowerCase() : p)).join(', ');
   }
 
   // ---------- países ----------
@@ -427,5 +483,5 @@
     return saida.join(' ') + sigla;
   }
 
-  return { grauEmIngles, paisEmIngles, instituicaoEmIngles, areaEmInglesInteira };
+  return { grauEmIngles, cursoEmIngles, linguaEmIngles, proficienciaEmIngles, paisEmIngles, instituicaoEmIngles, areaEmInglesInteira };
 });

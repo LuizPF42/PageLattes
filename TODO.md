@@ -73,6 +73,17 @@ estiver no ar.
   a pessoa por um artigo, é justamente a parte que menos conta. Quem
   priorizar busca pode escolher "Página única" na Aparência; talvez valha
   dizer isso ao lado da opção.
+- **A aba CV repete o site.** O currículo em HTML e o PDF (em base64) vão
+  inteiros no `index.html`, e no site em dois idiomas vão duas vezes. Num
+  currículo de dez páginas em dois idiomas, isso soma uns 150 KB (o PDF
+  comprimido é a menor parte; o HTML do papel, a maior); num com centenas de
+  produções mantidas, o arquivo passa de 1 MB. Quem quiser o arquivo menor
+  escolhe "Sem o CV" ou tira produções do site.
+- **O PDF usa as Times padrão do PDF**, sem fonte embutida, com a
+  codificação WinAnsi: cobre o português e as línguas da Europa ocidental.
+  Caracteres fora dela perdem o acento ("ł" vira "l") ou viram "?", como as
+  letras gregas de um título. Embutir uma fonte resolveria, ao custo de
+  algumas dezenas de KB por idioma.
 - **O site em dois idiomas mora numa URL só**, com uma das versões escondida
   por CSS. A versão em inglês dificilmente aparece sozinha numa busca em
   inglês. Resolver exigiria gerar dois arquivos, o que vai contra a premissa

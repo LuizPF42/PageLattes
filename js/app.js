@@ -51,6 +51,17 @@
     '(pode encurtar ou apagar; o site mostra o texto inteiro)': '(you can shorten or delete it; the site shows the full text)',
     'Outras informações': 'Other information',
     '(o que você fez nesse vínculo; pode encurtar ou apagar)': '(what you did in this position; you can shorten or delete it)',
+    '(nome do curso e nível, como “Direito (Graduação)”)': '(name of the program and level, like “Direito (Graduação)”)',
+    'Curso em inglês': 'Program in English',
+    // currículo em PDF
+    'Currículo em PDF': 'PDF CV',
+    'Baixar o CV em PDF': 'Download the PDF CV',
+    'Baixar o CV em PDF, em português': 'Download the PDF CV, in Portuguese',
+    'Baixar o CV em PDF, em inglês': 'Download the PDF CV, in English',
+    'O mesmo PDF vai dentro do site, na aba CV, para quem visita baixar. Aqui ele fica à mão para você enviar por e-mail ou imprimir.':
+      'The same PDF goes inside the site, in the CV tab, for visitors to download. Here it is at hand for you to email or print.',
+    'Gerando o PDF…': 'Generating the PDF…',
+    'Não consegui gerar o PDF.': 'Could not generate the PDF.',
     'Integrantes': 'Team',
     'Financiamento': 'Funding',
     'Site': 'Website',
@@ -345,7 +356,7 @@
   ];
 
   // Seções que já entram marcadas; as demais ficam para a pessoa escolher.
-  const SECOES_LIGADAS = /^(FormacaoAcademicaTitulacao|FormacaoAcademicaPosDoutorado|AtuacaoProfissional|ProjetosPesquisa|PremiosTitulos)$/;
+  const SECOES_LIGADAS = /^(FormacaoAcademicaTitulacao|FormacaoAcademicaPosDoutorado|AtuacaoProfissional|AtividadesEnsino|ProjetosPesquisa|ProjetosEnsino|PremiosTitulos)$/;
   const PRODUCOES_LIGADAS = /artigo|livro|cap[ií]tulo/i;
   // Ensino médio e fundamental vêm na formação acadêmica do Lattes, mas não dizem nada num site
   // de pesquisa: entram desmarcados (quem quiser, marca).
@@ -499,7 +510,7 @@
               titulo: antes.titulo, link: antes.link || it.link, manter: antes.manter, destaque: antes.destaque,
               dTitulo: antes.dTitulo, dVeiculo: antes.dVeiculo, dTexto: antes.dTexto, ordem: antes.ordem,
               // o que a pessoa escreveu em inglês também fica
-              tituloEn: antes.tituloEn, detalheEn: antes.detalheEn, descricaoEn: antes.descricaoEn, dTextoEn: antes.dTextoEn,
+              tituloEn: antes.tituloEn, detalheEn: antes.detalheEn, descricaoEn: antes.descricaoEn, obsEn: antes.obsEn, dTextoEn: antes.dTextoEn,
             };
             // O que foi editado aqui fica, e o texto do Lattes de agora passa a ser o original (é para
             // ele que "Voltar ao texto do Lattes" leva). O que não foi editado vem do Lattes: a descrição
@@ -727,6 +738,18 @@
           </fieldset>
 
           <fieldset class="grupo">
+            <legend>${_('Currículo em PDF')}</legend>
+            <div class="opcoes-layout">
+              ${Tema.CVS.map(c => `
+              <label class="opcao-layout">
+                <input type="radio" name="cv" value="${c.id}" data-aparencia="cv" class="invisivel"${ap.cv === c.id ? ' checked' : ''}>
+                <strong>${esc(_(c.nome))}</strong>
+                <span>${esc(_(c.descricao))}</span>
+              </label>`).join('')}
+            </div>
+          </fieldset>
+
+          <fieldset class="grupo">
             <legend>${_('Modo escuro')}</legend>
             <div class="opcoes-layout opcoes-escuro">
               ${Tema.ESCURO.map(e => `
@@ -826,6 +849,14 @@
       let y = 0;
       iframe.contentDocument.addEventListener('click', () => { y = window.scrollY; }, true);
       iframe.contentWindow.addEventListener('hashchange', () => window.scrollTo(window.scrollX, y));
+      // O botão do PDF, na aba CV da prévia, não tem o arquivo (ele só é gerado para o site final):
+      // o construtor gera e baixa na hora.
+      iframe.contentDocument.addEventListener('click', e => {
+        const a = e.target.closest('a.cv-baixar');
+        if (!a) return;
+        e.preventDefault();
+        baixarCv(a.dataset.cv);
+      });
       // O botão PT/EN do próprio site não funciona na prévia (iframe sem scripts): o construtor
       // faz o papel dele, junto do botão "Ver em inglês" da barra.
       iframe.contentDocument.addEventListener('click', e => {
@@ -979,6 +1010,9 @@
           </label>` : ''}
           <label class="ajuste">${_('Organização')}
             <select data-aparencia="layout">${Tema.LAYOUTS.map(l => `<option value="${l.id}"${ap.layout === l.id ? ' selected' : ''}>${esc(_(l.nome))}</option>`).join('')}</select>
+          </label>
+          <label class="ajuste">${_('CV')}
+            <select data-aparencia="cv">${Tema.CVS.map(c => `<option value="${c.id}"${ap.cv === c.id ? ' selected' : ''}>${esc(_(c.nome))}</option>`).join('')}</select>
           </label>
           <label class="ajuste">${_('Referências')}
             <select data-aparencia="referencias">${Tema.REFERENCIAS.map(r => `<option value="${r.id}"${ap.referencias === r.id ? ' selected' : ''}>${esc(_(r.nome))}</option>`).join('')}</select>
@@ -1202,6 +1236,7 @@
             <h2>${_('Baixe o index.html novo')}</h2>
             <p><button type="button" class="botao" data-acao="baixar">${_('Baixar index.html')}</button>
               <span id="estado-download" class="dica" role="status"></span></p>
+            ${botoesCv()}
           </li>
           <li class="passo">
             <span class="passo-num">2</span>
@@ -1227,6 +1262,7 @@
             <p><button type="button" class="botao" data-acao="baixar">${_('Baixar index.html')}</button>
               <span id="estado-download" class="dica" role="status"></span></p>
             <p class="dica">${_('O nome precisa ser exatamente <code>index.html</code>. Se o navegador salvar como “index (1).html”, renomeie antes de enviar.')}</p>
+            ${atualizando ? '' : botoesCv()}
           </li>
           <li class="passo">
             <span class="passo-num">2</span>
@@ -1276,6 +1312,19 @@
       </div>`;
   }
 
+  // O PDF do currículo, para a própria pessoa ter à mão (no site, ele está na aba CV).
+  function botoesCv() {
+    if (estado.aparencia.cv === 'nao') return '';
+    const idioma = estado.aparencia.idioma;
+    const botoes = idioma === 'ambos'
+      ? [['pt', _('Baixar o CV em PDF, em português')], ['en', _('Baixar o CV em PDF, em inglês')]]
+      : [[idioma, _('Baixar o CV em PDF')]];
+    return `
+            <p class="dica">${_('O mesmo PDF vai dentro do site, na aba CV, para quem visita baixar. Aqui ele fica à mão para você enviar por e-mail ou imprimir.')}</p>
+            <p>${botoes.map(([id, rotulo]) => `<button type="button" class="link" data-acao="baixar-cv" data-idioma="${id}">${rotulo}</button>`).join(' · ')}
+              <span id="estado-cv" class="dica" role="status"></span></p>`;
+  }
+
   function atualizarUsuario() {
     app.querySelectorAll('[data-href]').forEach(a => { a.href = comUsuario(a.dataset.href); });
     app.querySelectorAll('[data-texto]').forEach(s => { s.textContent = comUsuario(s.dataset.texto); });
@@ -1321,7 +1370,43 @@
 
   async function gerarArquivoFinal() {
     const fontesCss = await Tema.cssFontesEmbutidas(estado.aparencia, BASE_FONTES);
-    return Site.html(conteudoSite(), estado.aparencia, { fontesCss, dadosConstrutor: dadosParaReabrir() });
+    const conteudo = conteudoSite();
+    return Site.html(conteudo, estado.aparencia, { fontesCss, dadosConstrutor: dadosParaReabrir(), cvPdf: await pdfsDoCv(conteudo) });
+  }
+
+  // Os idiomas em que o site sai, cada um com o seu conteúdo (conteudoSite() dá um ou os dois).
+  function versoesDoSite(conteudo) {
+    const id = estado.aparencia.idioma;
+    return id === 'ambos' ? [['pt', conteudo.pt], ['en', conteudo.en]] : [[id, conteudo]];
+  }
+
+  // O PDF do currículo de cada versão do site, para ir dentro do index.html (ver Cv.arquivo).
+  async function pdfsDoCv(conteudo) {
+    if (estado.aparencia.cv === 'nao') return null;
+    const pdfs = {};
+    for (const [id, d] of versoesDoSite(conteudo)) pdfs[id] = await Cv.arquivo(d, id);
+    return pdfs;
+  }
+
+  // O PDF do currículo, baixado direto do construtor (botão da etapa Publicar e da aba CV da prévia).
+  async function baixarCv(idioma, aviso) {
+    const versoes = versoesDoSite(conteudoSite());
+    const [id, d] = versoes.find(([v]) => v === idioma) || versoes[0];
+    try {
+      if (aviso) aviso.textContent = _('Gerando o PDF…');
+      const pdf = await Cv.arquivo(d, id);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([pdf.bytes], { type: 'application/pdf' }));
+      a.download = pdf.nome;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      if (aviso) aviso.textContent = '';
+    } catch (e) {
+      console.error(e);
+      if (aviso) aviso.textContent = _('Não consegui gerar o PDF.') + ' ' + e.message;
+    }
   }
 
   // No Chrome e no Edge, a janela "Salvar como" já vem com o nome index.html (e sobrescreve o antigo),
@@ -1661,10 +1746,17 @@
 
   // "Outras informações" é o texto livre que o Lattes guarda em cada vínculo profissional: o que a
   // pessoa fez ali. O lápis abre o campo mesmo vazio, para dar de escrever (ou de apagar e voltar
-  // a escrever), como na descrição dos projetos. Nas outras seções o mesmo campo é registro (o
-  // título da tese, na formação) e fica como veio.
-  function temOutrasInfos(s) {
-    return /^AtuacaoProfissional/.test(s.id || '');
+  // a escrever), como na descrição dos projetos. Nas disciplinas ministradas, o mesmo campo guarda o
+  // curso ("Direito (Graduação)"). Nas outras seções ele é registro (o título da tese, na formação)
+  // e fica como veio.
+  function campoObs(s) {
+    if (/^AtuacaoProfissional/.test(s.id || '')) {
+      return { rotulo: 'Outras informações', dica: '(o que você fez nesse vínculo; pode encurtar ou apagar)', en: 'Outras informações em inglês', linhas: 4 };
+    }
+    if (s.id === 'AtividadesEnsino') {
+      return { rotulo: 'Curso', dica: '(nome do curso e nível, como “Direito (Graduação)”)', en: 'Curso em inglês', linhas: 1 };
+    }
+    return null;
   }
 
   // Um texto do Lattes que não cabe resumido na lista (descrição de projeto, "Outras informações"
@@ -1679,6 +1771,7 @@
     const editando = ui.editando === chave;
     const inteiro = ui.textoCompleto.has(chave);
     const resumo = campo => inteiro ? it[campo] : resumir(it[campo], RESUMOS[campo]);
+    const obs = campoObs(s);
     const conteudo = editando ? `
       <div class="editor">
         <textarea data-editor="${chave}" rows="3" aria-label="${esc(_('Texto do item'))}">${esc(it.titulo)}</textarea>
@@ -1692,10 +1785,10 @@
           <span>${_('Descrição')} <em>${_('(pode encurtar ou apagar; o site mostra o texto inteiro)')}</em></span>
           <textarea data-editor-descricao="${chave}" rows="5">${esc(it.descricao || '')}</textarea>
         </label>` : ''}
-        ${temOutrasInfos(s) ? `
+        ${obs ? `
         <label class="editor-link">
-          <span>${_('Outras informações')} <em>${_('(o que você fez nesse vínculo; pode encurtar ou apagar)')}</em></span>
-          <textarea data-editor-obs="${chave}" rows="4">${esc(it.obs || '')}</textarea>
+          <span>${_(obs.rotulo)} <em>${_(obs.dica)}</em></span>
+          <textarea data-editor-obs="${chave}" rows="${obs.linhas}">${esc(it.obs || '')}</textarea>
         </label>` : ''}
         ${siteEmIngles() && s.tipo !== 'producao' ? editorItemEn(s, it, chave) : ''}
         <label class="editor-link">
@@ -1744,16 +1837,18 @@
   // referências bibliográficas e ficam como estão. Mostra o que as regras de ingles.js fariam sem
   // eles ("PhD in Law", "University of São Paulo"), para a pessoa decidir se vale escrever.
   function editorItemEn(s, it, chave) {
-    const auto = Site.itemNoIdioma(s, Object.assign({}, it, { tituloEn: '', detalheEn: '', descricaoEn: '' }), true);
-    const regra = [auto.titulo !== it.titulo ? auto.titulo : '', it.detalhe && auto.detalhe !== it.detalhe ? auto.detalhe : ''].filter(Boolean).join(' · ');
+    const auto = Site.itemNoIdioma(s, Object.assign({}, it, { tituloEn: '', detalheEn: '', descricaoEn: '', obsEn: '' }), true);
+    const regra = [auto.titulo !== it.titulo ? auto.titulo : '', it.detalhe && auto.detalhe !== it.detalhe ? auto.detalhe : '',
+      it.obs && auto.obs !== it.obs ? auto.obs : ''].filter(Boolean).join(' · ');
     const temDescricao = 'descricao' in it || /^(Projetos|OutrosProjetos|LinhaPesquisa)/.test(s.id || '');
+    const obs = campoObs(s);
     return `
         <div class="editor-en">
           <span>${_('Em inglês (opcional: vazio, fica em português)')}</span>
           <textarea data-editor-campo="tituloEn" data-item="${chave}" rows="2" lang="en" aria-label="${esc(_('Texto do item em inglês'))}" placeholder="${esc(_('Texto do item em inglês'))}">${esc(it.tituloEn || '')}</textarea>
           ${!it.integrantes ? `<input data-editor-campo="detalheEn" data-item="${chave}" value="${esc(it.detalheEn || '')}" lang="en" aria-label="${esc(_('Detalhe em inglês (instituição, papel…)'))}" placeholder="${esc(_('Detalhe em inglês (instituição, papel…)'))}">` : ''}
           ${temDescricao ? `<textarea data-editor-campo="descricaoEn" data-item="${chave}" rows="4" lang="en" aria-label="${esc(_('Descrição em inglês'))}" placeholder="${esc(_('Descrição em inglês'))}">${esc(it.descricaoEn || '')}</textarea>` : ''}
-          ${temOutrasInfos(s) ? `<textarea data-editor-campo="obsEn" data-item="${chave}" rows="4" lang="en" aria-label="${esc(_('Outras informações em inglês'))}" placeholder="${esc(_('Outras informações em inglês'))}">${esc(it.obsEn || '')}</textarea>` : ''}
+          ${obs ? `<textarea data-editor-campo="obsEn" data-item="${chave}" rows="${obs.linhas}" lang="en" aria-label="${esc(_(obs.en))}" placeholder="${esc(_(obs.en))}">${esc(it.obsEn || '')}</textarea>` : ''}
           ${regra ? `<p class="dica">${_('Se ficar vazio, o site mostra: {texto}', { texto: `<em lang="en">${esc(regra)}</em>` })}</p>` : ''}
         </div>`;
   }
@@ -1924,11 +2019,21 @@
         break;
 
       case 'abrir-site': {
-        // Um Blob próprio, que não é revogado quando a prévia é refeita.
-        const html = Site.html(conteudoSite(), estado.aparencia, { previa: true, baseFontes: BASE_FONTES });
-        window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank', 'noopener');
+        // Um Blob próprio, que não é revogado quando a prévia é refeita. A janela abre antes de o PDF
+        // do CV ficar pronto (senão o navegador a trata como pop-up) e recebe o endereço depois.
+        const janela = window.open('', '_blank');
+        const conteudo = conteudoSite();
+        pdfsDoCv(conteudo).catch(() => null).then(cvPdf => {
+          const html = Site.html(conteudo, estado.aparencia, { previa: true, baseFontes: BASE_FONTES, cvPdf });
+          const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+          if (janela) { janela.opener = null; janela.location.href = url; } else window.open(url, '_blank', 'noopener');
+        });
         break;
       }
+
+      case 'baixar-cv':
+        baixarCv(b.dataset.idioma, document.getElementById('estado-cv'));
+        break;
 
       case 'sem-lattes':
         estado.semLattes = true;
@@ -2135,8 +2240,9 @@
     const campo = e.target.closest('[data-editor], [data-editor-link], [data-editor-detalhe], [data-editor-descricao], [data-editor-obs], [data-editor-campo]');
     if (!campo) return;
     const [si, ii] = (campo.dataset.editor || campo.dataset.editorLink || campo.dataset.editorDetalhe || campo.dataset.editorDescricao || campo.dataset.editorObs || campo.dataset.item).split(':').map(Number);
-    // Texto longo: Enter quebra linha, em vez de salvar.
-    const longo = campo.dataset.editorDescricao || campo.dataset.editorObs || /^(descricaoEn|obsEn)$/.test(campo.dataset.editorCampo || '');
+    // Texto longo: Enter quebra linha, em vez de salvar. O campo do curso, nas disciplinas, é de uma linha.
+    const obs = campo.dataset.editorObs || campo.dataset.editorCampo === 'obsEn';
+    const longo = campo.dataset.editorDescricao || campo.dataset.editorCampo === 'descricaoEn' || (obs && campo.rows > 1);
     if (e.key === 'Enter' && !e.shiftKey && !longo) { e.preventDefault(); salvarEdicao(si, ii); }
     if (e.key === 'Escape') { ui.editando = null; trocarItem(si, ii); }
   });
@@ -2169,7 +2275,7 @@
     if (campo === 'idioma' && t.value !== 'ambos') ui.idiomaPrevia = 'pt';
     salvar();
     // Organização, estrutura, foto e idioma mudam o HTML; cor e fonte só mudam variáveis CSS.
-    if (campo === 'layout' || campo === 'estrutura' || campo === 'foto' || campo === 'referencias' || campo === 'idioma') montarPrevia();
+    if (campo === 'layout' || campo === 'estrutura' || campo === 'foto' || campo === 'referencias' || campo === 'idioma' || campo === 'cv') montarPrevia();
     atualizarAparencia();
   }
 
