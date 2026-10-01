@@ -78,7 +78,10 @@ estiver no ar.
   currículo de dez páginas em dois idiomas, isso soma uns 150 KB (o PDF
   comprimido é a menor parte; o HTML do papel, a maior); num com centenas de
   produções mantidas, o arquivo passa de 1 MB. Quem quiser o arquivo menor
-  escolhe "Sem o CV" ou tira produções do site.
+  escolhe "Sem o CV" ou tira produções do site. Com "Meu próprio PDF", o
+  arquivo enviado vai inteiro em base64 (um terço maior que o PDF), uma vez
+  por PDF enviado: no site em dois idiomas com um PDF só, a versão em inglês
+  pega o endereço da versão em português pelo script do botão PT/EN.
 - **O PDF usa as Times padrão do PDF**, sem fonte embutida, com a
   codificação WinAnsi: cobre o português e as línguas da Europa ocidental.
   Caracteres fora dela perdem o acento ("ł" vira "l") ou viram "?", como as

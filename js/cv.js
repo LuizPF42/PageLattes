@@ -30,6 +30,11 @@
     'Baixar em PDF': 'Download PDF',
     'PDF, A4, {n} páginas': 'PDF, A4, {n} pages',
     'PDF, A4, 1 página': 'PDF, A4, 1 page',
+    'PDF, {kb} KB': 'PDF, {kb} KB',
+    'PDF, {n} páginas': 'PDF, {n} pages',
+    'PDF, 1 página': 'PDF, 1 page',
+    'O currículo completo, em PDF.': 'The full CV, as a PDF.',
+    'Envie o seu PDF na etapa Aparência do construtor.': 'Upload your PDF in the Appearance step of the builder.',
     // cabeçalho
     'Nome': 'Name',
     'Site': 'Website',
@@ -118,6 +123,7 @@
       blocos.push({ titulo, partes });
     });
 
+    const arquivoBase = nome.replace(/[\\/:*?"<>|]+/g, '').trim();
     return {
       idioma: I18n.idioma(),
       lang: I18n.lang(I18n.idioma()),
@@ -127,7 +133,9 @@
       blocos,
       titulo: `${nome} — ${_('Currículo')}`,
       // "Nome - Currículo.pdf" e "Nome - CV.pdf": no site em dois idiomas, os arquivos não se confundem.
-      arquivo: `${nome.replace(/[\\/:*?"<>|]+/g, '').trim()} - ${I18n.idioma() === 'en' ? 'CV' : 'Currículo'}.pdf`,
+      // O PDF que a pessoa enviou pode estar em qualquer língua: sai como "Nome - CV.pdf".
+      arquivo: `${arquivoBase} - ${I18n.idioma() === 'en' ? 'CV' : 'Currículo'}.pdf`,
+      arquivoProprio: `${arquivoBase} - CV.pdf`,
       rotulos: { nome: _('Nome'), umaPagina: _('PDF, A4, 1 página'), paginas: _('PDF, A4, {n} páginas') },
     };
   }
@@ -205,19 +213,32 @@
 
   // ---------- modelo -> HTML (a aba do site) ----------
 
-  // `pdf`: { href, nome, paginas } do arquivo já gerado; na prévia do construtor, vem sem href e o
-  // botão só marca o idioma (o construtor gera o PDF na hora do clique). `papel`: false no site em
-  // página única, onde fica só o botão (o currículo inteiro repetiria a página).
-  function html(m, { pdf = null, papel = true } = {}) {
-    const info = pdf && pdf.paginas ? (pdf.paginas === 1 ? m.rotulos.umaPagina : m.rotulos.paginas.replace('{n}', pdf.paginas)) : '';
+  // `pdf`: { href, paginas, bytes } do arquivo; na prévia do construtor, vem sem href e o botão só
+  // marca o idioma (o construtor baixa o PDF na hora do clique). `papel`: false no site em página
+  // única, onde fica só o botão (o currículo inteiro repetiria a página).
+  // `proprio`: o PDF é o que a pessoa enviou, e não há papel (não sabemos o que tem dentro). Num site
+  // em dois idiomas com um PDF só, a versão em inglês não repete o arquivo: `emprestado` ("pt") diz de
+  // qual versão o script do botão PT/EN copia o endereço (sem JavaScript, só a versão em português
+  // aparece). `previa` sem arquivo: o lembrete de enviar o PDF, em vez do botão.
+  function html(m, { pdf = null, papel = true, proprio = false, emprestado = '', previa = false } = {}) {
+    const kb = pdf && pdf.bytes ? Math.max(1, Math.round(pdf.bytes / 1024)) : 0;
+    // O PDF próprio pode não ser A4: só o número de páginas (ou o tamanho, quando não deu para contar).
+    const paginas = !pdf || !pdf.paginas ? ''
+      : proprio ? (pdf.paginas === 1 ? _('PDF, 1 página') : _('PDF, {n} páginas', { n: pdf.paginas }))
+      : pdf.paginas === 1 ? m.rotulos.umaPagina : m.rotulos.paginas.replace('{n}', pdf.paginas);
+    const info = paginas || (kb ? _('PDF, {kb} KB', { kb }) : '');
     // Sem o arquivo, nada de `download`: com href="#", o navegador baixaria a própria página como PDF.
-    const href = pdf && pdf.href ? `href="${esc(pdf.href)}" download="${esc(m.arquivo)}"` : 'href="#"';
-    const botao = `<a class="cv-baixar" ${href} target="_self" data-cv="${esc(m.idioma)}">${esc(_('Baixar em PDF'))}</a>${info ? `<span class="cv-info">${esc(info)}</span>` : ''}`;
+    const href = emprestado ? `href="#" data-cv-de="${esc(emprestado)}"`
+      : pdf && pdf.href ? `href="${esc(pdf.href)}" download="${esc(proprio ? m.arquivoProprio : m.arquivo)}"` : 'href="#"';
+    const botao = proprio && !pdf
+      ? (previa ? `<span class="cv-info">${esc(_('Envie o seu PDF na etapa Aparência do construtor.'))}</span>` : '')
+      : `<a class="cv-baixar" ${href} target="_self" data-cv="${esc(m.idioma)}"${proprio ? ' data-proprio' : ''}>${esc(_('Baixar em PDF'))}</a>${info ? `<span class="cv-info">${esc(info)}</span>` : ''}`;
+    const sobre = proprio ? _('O currículo completo, em PDF.') : _('O mesmo conteúdo deste site, num currículo em formato neutro, pronto para imprimir ou enviar.');
     return `
   <section class="cv">
     <h2>${esc(_('Currículo'))}</h2>
-    <p class="cv-acoes"><span class="cv-sobre">${esc(_('O mesmo conteúdo deste site, num currículo em formato neutro, pronto para imprimir ou enviar.'))}</span>${botao}</p>
-    ${papel ? papelHtml(m) : ''}
+    <p class="cv-acoes"><span class="cv-sobre">${esc(sobre)}</span>${botao}</p>
+    ${papel && !proprio ? papelHtml(m) : ''}
   </section>`;
   }
 

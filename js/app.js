@@ -62,6 +62,22 @@
       'The same PDF goes inside the site, in the CV tab, for visitors to download. Here it is at hand for you to email or print.',
     'Gerando o PDF…': 'Generating the PDF…',
     'Não consegui gerar o PDF.': 'Could not generate the PDF.',
+    // o PDF próprio
+    'Enviar o PDF': 'Upload the PDF',
+    'Trocar': 'Replace',
+    'Tirar': 'Remove',
+    'Em português': 'In Portuguese',
+    '{n} páginas': '{n} pages',
+    '1 página': '1 page',
+    'Se enviar um só, ele vale para as duas versões do site.': 'If you upload only one, it is used in both versions of the site.',
+    'O PDF vai para o site como está, e fica público: confira se ele não traz telefone, endereço ou documento que você não queira mostrar. Ele também vai dentro do <code>index.html</code>, então quanto menor, mais rápido o site abre.':
+      'The PDF goes to the site as it is, and becomes public: check that it has no phone number, address or ID you do not want to show. It also goes inside <code>index.html</code>, so the smaller it is, the faster the site opens.',
+    'Este arquivo não é um PDF.': 'This file is not a PDF.',
+    'O PDF tem {mb} MB; o limite é {max} MB, porque ele vai dentro do site e todo visitante o baixa junto.': 'The PDF is {mb} MB; the limit is {max} MB, because it goes inside the site and every visitor downloads it along with the page.',
+    'Na aba CV, o site oferece o seu PDF: {arquivo}.': 'In the CV tab, the site offers your PDF: {arquivo}.',
+    'Você escolheu publicar o seu próprio PDF, mas ainda não enviou o arquivo. Sem ele, o site sai sem a aba CV.': 'You chose to publish your own PDF, but have not uploaded it yet. Without it, the site has no CV tab.',
+    'Enviar na etapa Aparência': 'Upload it in the Appearance step',
+    'Não consegui guardar o PDF neste navegador: ele vale até você fechar a página.': 'Could not store the PDF in this browser: it lasts until you close the page.',
     'Integrantes': 'Team',
     'Financiamento': 'Funding',
     'Site': 'Website',
@@ -390,6 +406,9 @@
       edicoesOcultas: {},
       parcial: false,
       versaoArquivo: 0,
+      // O PDF de currículo que a pessoa enviou, por idioma: só nome, tamanho e páginas. O arquivo fica
+      // no IndexedDB (ver pdfsProprios).
+      cvProprio: {},
     };
   }
 
@@ -439,6 +458,7 @@
       e.aparencia = Tema.normalizar(e.aparencia);
       e.perfil = Object.assign(novoEstado().perfil, e.perfil);
       e.publicacao = Object.assign(novoEstado().publicacao, e.publicacao);
+      e.cvProprio = Object.assign({}, e.cvProprio);
       completarProducoes(e.secoes);
       // Progresso salvo antes de existirem os interesses: sugere as áreas de atuação, como numa importação.
       if (!e.perfil.interessesEditados && !e.perfil.interesses.length) e.perfil.interesses = Site.interessesPadrao(e.secoes);
@@ -739,7 +759,7 @@
 
           <fieldset class="grupo">
             <legend>${_('Currículo em PDF')}</legend>
-            <div class="opcoes-layout">
+            <div class="opcoes-layout opcoes-escuro">
               ${Tema.CVS.map(c => `
               <label class="opcao-layout">
                 <input type="radio" name="cv" value="${c.id}" data-aparencia="cv" class="invisivel"${ap.cv === c.id ? ' checked' : ''}>
@@ -747,6 +767,7 @@
                 <span>${esc(_(c.descricao))}</span>
               </label>`).join('')}
             </div>
+            ${htmlCvProprio()}
           </fieldset>
 
           <fieldset class="grupo">
@@ -841,7 +862,7 @@
     if (!iframe) return;
     const d = conteudoSite();
     if (urlPrevia) URL.revokeObjectURL(urlPrevia);
-    urlPrevia = URL.createObjectURL(new Blob([Site.html(d, estado.aparencia, { previa: true, baseFontes: BASE_FONTES })], { type: 'text/html' }));
+    urlPrevia = URL.createObjectURL(new Blob([Site.html(d, estado.aparencia, { previa: true, baseFontes: BASE_FONTES, cvProprio: proprioParaSite(false) })], { type: 'text/html' }));
     iframe.onload = () => {
       prepararFoto();
       atualizarCores();
@@ -1315,6 +1336,13 @@
   // O PDF do currículo, para a própria pessoa ter à mão (no site, ele está na aba CV).
   function botoesCv() {
     if (estado.aparencia.cv === 'nao') return '';
+    if (estado.aparencia.cv === 'proprio') {
+      const enviados = ['pt', 'en'].filter(id => estado.cvProprio[id] && pdfsProprios[id]);
+      return enviados.length
+        ? `<p class="dica">${_('Na aba CV, o site oferece o seu PDF: {arquivo}.', { arquivo: enviados.map(id => `<strong>${esc(estado.cvProprio[id].nome)}</strong>`).join(', ') })}</p>`
+        : `<p class="aviso-cv">${_('Você escolheu publicar o seu próprio PDF, mas ainda não enviou o arquivo. Sem ele, o site sai sem a aba CV.')}
+            <button type="button" class="link" data-ir="aparencia">${_('Enviar na etapa Aparência')}</button></p>`;
+    }
     const idioma = estado.aparencia.idioma;
     const botoes = idioma === 'ambos'
       ? [['pt', _('Baixar o CV em PDF, em português')], ['en', _('Baixar o CV em PDF, em inglês')]]
@@ -1360,6 +1388,7 @@
         interesses: p.interesses, interessesEn: p.interessesEn, interessesEditados: p.interessesEditados,
       },
       publicacao: { usuario: usuarioAtual() },
+      cvProprio: estado.aparencia.cv === 'proprio' ? estado.cvProprio : {},
       secoes: estado.secoes
         .map(s => ({ id: s.id, titulo: s.titulo, tipo: s.tipo, itens: s.itens.filter(i => i.manter) }))
         .filter(s => s.itens.length),
@@ -1371,7 +1400,7 @@
   async function gerarArquivoFinal() {
     const fontesCss = await Tema.cssFontesEmbutidas(estado.aparencia, BASE_FONTES);
     const conteudo = conteudoSite();
-    return Site.html(conteudo, estado.aparencia, { fontesCss, dadosConstrutor: dadosParaReabrir(), cvPdf: await pdfsDoCv(conteudo) });
+    return Site.html(conteudo, estado.aparencia, { fontesCss, dadosConstrutor: dadosParaReabrir(), cvPdf: await pdfsDoCv(conteudo), cvProprio: proprioParaSite(true) });
   }
 
   // Os idiomas em que o site sai, cada um com o seu conteúdo (conteudoSite() dá um ou os dois).
@@ -1382,7 +1411,7 @@
 
   // O PDF do currículo de cada versão do site, para ir dentro do index.html (ver Cv.arquivo).
   async function pdfsDoCv(conteudo) {
-    if (estado.aparencia.cv === 'nao') return null;
+    if (estado.aparencia.cv !== 'sim') return null;
     const pdfs = {};
     for (const [id, d] of versoesDoSite(conteudo)) pdfs[id] = await Cv.arquivo(d, id);
     return pdfs;
@@ -1390,23 +1419,154 @@
 
   // O PDF do currículo, baixado direto do construtor (botão da etapa Publicar e da aba CV da prévia).
   async function baixarCv(idioma, aviso) {
+    if (estado.aparencia.cv === 'proprio') {
+      const id = pdfsProprios[idioma] ? idioma : ['pt', 'en'].find(x => pdfsProprios[x]);
+      if (id) baixarBlob(await (await fetch(pdfsProprios[id])).blob(), estado.cvProprio[id].nome || 'CV.pdf');
+      return;
+    }
     const versoes = versoesDoSite(conteudoSite());
     const [id, d] = versoes.find(([v]) => v === idioma) || versoes[0];
     try {
       if (aviso) aviso.textContent = _('Gerando o PDF…');
       const pdf = await Cv.arquivo(d, id);
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([pdf.bytes], { type: 'application/pdf' }));
-      a.download = pdf.nome;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      baixarBlob(new Blob([pdf.bytes], { type: 'application/pdf' }), pdf.nome);
       if (aviso) aviso.textContent = '';
     } catch (e) {
       console.error(e);
       if (aviso) aviso.textContent = _('Não consegui gerar o PDF.') + ' ' + e.message;
     }
+  }
+
+  function baixarBlob(blob, nome) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+
+  // ---------- o PDF de currículo enviado pela pessoa ----------
+  // Com "Meu próprio PDF", a aba CV oferece o arquivo que a pessoa enviou (um por idioma, no site em
+  // dois idiomas; um só vale para os dois). O arquivo pode ter alguns MB: fica no IndexedDB, e não no
+  // localStorage, que tem pouco espaço e guarda o resto do progresso (se o PDF não coubesse lá, o
+  // progresso deixaria de ser salvo). Em `estado.cvProprio` ficam só o nome, o tamanho e as páginas.
+
+  const PDF_MAX_MB = 5;
+  const pdfsProprios = {}; // idioma -> data URI, já lido do IndexedDB ou do arquivo enviado
+
+  // Uma "gaveta" no IndexedDB, com chave e valor. Sem IndexedDB (alguns modos privados), as funções
+  // falham e o PDF fica só na memória, até a página fechar.
+  const gaveta = (() => {
+    let banco = null;
+    const abrir = () => banco || (banco = new Promise((ok, falha) => {
+      const r = indexedDB.open('pagelattes', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('arquivos');
+      r.onsuccess = () => ok(r.result);
+      r.onerror = () => falha(r.error);
+    }));
+    const pedir = (modo, fazer) => abrir().then(db => new Promise((ok, falha) => {
+      const r = fazer(db.transaction('arquivos', modo).objectStore('arquivos'));
+      r.onsuccess = () => ok(r.result);
+      r.onerror = () => falha(r.error);
+    }));
+    return {
+      ler: chave => pedir('readonly', g => g.get(chave)),
+      gravar: (chave, valor) => pedir('readwrite', g => g.put(valor, chave)),
+      apagar: chave => pedir('readwrite', g => g.delete(chave)),
+    };
+  })();
+
+  // Os PDFs guardados de outras visitas. Um que sumiu do navegador (dados limpos) deixa de constar.
+  async function carregarPdfsProprios() {
+    let mudou = false;
+    for (const id of Object.keys(estado.cvProprio)) {
+      const uri = await gaveta.ler('cv-' + id).catch(() => null);
+      if (uri) pdfsProprios[id] = uri;
+      else { delete estado.cvProprio[id]; mudou = true; }
+    }
+    if (mudou) salvar();
+    if (Object.keys(pdfsProprios).length || mudou) {
+      trocarCvProprio();
+      if (estado.etapa === 'aparencia' || estado.etapa === 'revisao') montarPrevia();
+      if (estado.etapa === 'publicar') render();
+    }
+  }
+
+  // Um PDF tem uma entrada "/Type /Page" por página. Quando elas vêm comprimidas (PDFs mais novos),
+  // a contagem dá zero e o site mostra o tamanho do arquivo no lugar das páginas.
+  function contarPaginas(bytes) {
+    const texto = new TextDecoder('latin1').decode(bytes);
+    return (texto.match(/\/Type\s*\/Page(?![A-Za-z])/g) || []).length;
+  }
+
+  async function enviarPdfProprio(id, arquivo) {
+    const erro = document.getElementById('erro-cv');
+    const mostrar = msg => { if (erro) { erro.textContent = msg; erro.hidden = !msg; } };
+    const bytes = new Uint8Array(await arquivo.arrayBuffer());
+    if (String.fromCharCode.apply(null, bytes.subarray(0, 5)) !== '%PDF-') return mostrar(_('Este arquivo não é um PDF.'));
+    if (bytes.length > PDF_MAX_MB * 1024 * 1024) {
+      return mostrar(_('O PDF tem {mb} MB; o limite é {max} MB, porque ele vai dentro do site e todo visitante o baixa junto.',
+        { mb: (bytes.length / 1048576).toFixed(1).replace('.', I18n.idioma() === 'pt' ? ',' : '.'), max: PDF_MAX_MB }));
+    }
+    const uri = 'data:application/pdf;base64,' + Pdf.base64(bytes);
+    pdfsProprios[id] = uri;
+    estado.cvProprio[id] = { nome: arquivo.name, bytes: bytes.length, paginas: contarPaginas(bytes) };
+    salvar();
+    trocarCvProprio();
+    montarPrevia();
+    gaveta.gravar('cv-' + id, uri).catch(() => mostrar(_('Não consegui guardar o PDF neste navegador: ele vale até você fechar a página.')));
+  }
+
+  function esquecerPdfProprio(id) {
+    delete pdfsProprios[id];
+    delete estado.cvProprio[id];
+    gaveta.apagar('cv-' + id).catch(() => {});
+  }
+
+  // O que o site recebe (opcoes.cvProprio): com o arquivo (`comArquivo`, para o index.html e a aba
+  // nova) ou só com os dados, para a prévia, onde o construtor baixa o PDF na hora do clique.
+  function proprioParaSite(comArquivo) {
+    if (estado.aparencia.cv !== 'proprio') return null;
+    const out = {};
+    for (const id of ['pt', 'en']) {
+      const meta = estado.cvProprio[id];
+      if (meta && pdfsProprios[id]) out[id] = Object.assign({}, meta, comArquivo ? { href: pdfsProprios[id] } : {});
+    }
+    return out;
+  }
+
+  // O bloco de envio, abaixo das opções do CV na Aparência: aparece com "Meu próprio PDF".
+  function htmlCvProprio() {
+    const ap = estado.aparencia;
+    const ids = ap.idioma === 'ambos' ? ['pt', 'en'] : [ap.idioma];
+    const tamanho = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+    const vaga = id => {
+      // No site num idioma só, vale também um PDF enviado quando o site estava no outro.
+      const chave = estado.cvProprio[id] ? id : ids.length === 1 ? ['pt', 'en'].find(x => estado.cvProprio[x]) || id : id;
+      const meta = estado.cvProprio[chave];
+      const envio = rotulo => `<label class="${meta ? 'link' : 'botao-secundario'}">${rotulo}<input type="file" accept="application/pdf,.pdf" class="invisivel" data-arquivo="cv-${chave}"></label>`;
+      return `
+              <div class="cv-arquivo">
+                ${ids.length > 1 ? `<span class="cv-arquivo-idioma">${id === 'pt' ? _('Em português') : _('Em inglês')}</span>` : ''}
+                ${meta ? `<span class="cv-arquivo-nome">${esc(meta.nome)} <small>${[tamanho(meta.bytes), meta.paginas ? (meta.paginas === 1 ? _('1 página') : _('{n} páginas', { n: meta.paginas })) : ''].filter(Boolean).join(' · ')}</small></span>
+                ${envio(_('Trocar'))}
+                <button type="button" class="link" data-acao="tirar-cv" data-idioma="${chave}">${_('Tirar')}</button>` : envio(_('Enviar o PDF'))}
+              </div>`;
+    };
+    return `
+            <div class="cv-proprio" id="cv-proprio"${ap.cv === 'proprio' ? '' : ' hidden'}>
+              ${ids.map(vaga).join('')}
+              ${ids.length > 1 ? `<p class="dica">${_('Se enviar um só, ele vale para as duas versões do site.')}</p>` : ''}
+              <p class="erro" id="erro-cv" role="alert" hidden></p>
+              <p class="dica">${_('O PDF vai para o site como está, e fica público: confira se ele não traz telefone, endereço ou documento que você não queira mostrar. Ele também vai dentro do <code>index.html</code>, então quanto menor, mais rápido o site abre.')}</p>
+            </div>`;
+  }
+
+  function trocarCvProprio() {
+    const el = document.getElementById('cv-proprio');
+    if (el) el.outerHTML = htmlCvProprio();
   }
 
   // No Chrome e no Edge, a janela "Salvar como" já vem com o nome index.html (e sobrescreve o antigo),
@@ -1498,6 +1658,25 @@
       // Guardado em português; a tela traduz na hora de mostrar.
       avisos: dados.fonte ? ['Site reaberto a partir do index.html, que guarda só o que estava publicado. Para ver de novo todas as produções do Lattes, use “Usar outro arquivo” e traga a página atualizada do currículo: suas escolhas continuam.'] : [],
     });
+    // O PDF próprio também vem da página: o endereço data: do botão da aba CV de cada versão (a versão
+    // que pega o PDF emprestado da outra não tem endereço). Nome e páginas vêm das escolhas guardadas.
+    for (const id of ['pt', 'en']) esquecerPdfProprio(id);
+    const metas = dados.cvProprio && typeof dados.cvProprio === 'object' ? dados.cvProprio : {};
+    if (estado.aparencia.cv === 'proprio') {
+      doc.querySelectorAll('a.cv-baixar[data-proprio]').forEach(a => {
+        const uri = a.getAttribute('href') || '';
+        if (!/^data:application\/pdf;base64,/.test(uri)) return;
+        const id = a.dataset.cv === 'en' ? 'en' : 'pt';
+        const meta = metas[id] || metas.pt || metas.en || {};
+        pdfsProprios[id] = uri;
+        estado.cvProprio[id] = {
+          nome: String(meta.nome || 'CV.pdf'),
+          bytes: Math.floor((uri.length - uri.indexOf(',') - 1) * 3 / 4),
+          paginas: Number(meta.paginas) || 0,
+        };
+        gaveta.gravar('cv-' + id, uri).catch(() => {});
+      });
+    }
   }
 
   // Etapa 0: quem já publicou um site feito aqui traz o index.html e continua de onde parou.
@@ -2024,7 +2203,7 @@
         const janela = window.open('', '_blank');
         const conteudo = conteudoSite();
         pdfsDoCv(conteudo).catch(() => null).then(cvPdf => {
-          const html = Site.html(conteudo, estado.aparencia, { previa: true, baseFontes: BASE_FONTES, cvPdf });
+          const html = Site.html(conteudo, estado.aparencia, { previa: true, baseFontes: BASE_FONTES, cvPdf, cvProprio: proprioParaSite(true) });
           const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
           if (janela) { janela.opener = null; janela.location.href = url; } else window.open(url, '_blank', 'noopener');
         });
@@ -2033,6 +2212,13 @@
 
       case 'baixar-cv':
         baixarCv(b.dataset.idioma, document.getElementById('estado-cv'));
+        break;
+
+      case 'tirar-cv':
+        esquecerPdfProprio(b.dataset.idioma);
+        salvar();
+        trocarCvProprio();
+        montarPrevia();
         break;
 
       case 'sem-lattes':
@@ -2059,6 +2245,7 @@
         ui.textoCompleto.clear();
         ui.editando = null;
         try { localStorage.removeItem(CHAVE); } catch (err) { /* nada a limpar */ }
+        for (const id of ['pt', 'en']) esquecerPdfProprio(id);
         render();
         window.scrollTo(0, 0);
         break;
@@ -2273,6 +2460,7 @@
       ap.fonteTexto = c.texto;
     } else ap[campo] = t.value;
     if (campo === 'idioma' && t.value !== 'ambos') ui.idiomaPrevia = 'pt';
+    if (campo === 'cv' || campo === 'idioma') trocarCvProprio();
     salvar();
     // Organização, estrutura, foto e idioma mudam o HTML; cor e fonte só mudam variáveis CSS.
     if (campo === 'layout' || campo === 'estrutura' || campo === 'foto' || campo === 'referencias' || campo === 'idioma' || campo === 'cv') montarPrevia();
@@ -2308,6 +2496,11 @@
     }
 
     if (t.dataset.arquivo === 'lattes' && t.files[0]) importar(t.files[0]);
+
+    if (/^cv-(pt|en)$/.test(t.dataset.arquivo || '') && t.files[0]) {
+      enviarPdfProprio(t.dataset.arquivo.slice(3), t.files[0]);
+      return;
+    }
 
     if (t.dataset.arquivo === 'foto' && t.files[0]) {
       try {
@@ -2644,4 +2837,5 @@
   window.addEventListener('resize', ajustar);
   Tema.carregarFontes(document, BASE_FONTES); // para as amostras de fonte da tela de aparência
   render();
+  carregarPdfsProprios();
 })();

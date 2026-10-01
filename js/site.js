@@ -529,7 +529,7 @@
     const conteudo = abas
       ? abas.map(a => `<div class="aba aba-${a.id}">${a.html}</div>`).join('')
       : (ap.estrutura === 'topo' ? apresentacao(d) : inicio(d)) + d.secoes.map(s => secao(s, ap.referencias === 'completas', d.nome)).join('') +
-        (temCv(d, ap) ? htmlCv(d, opcoes, false) : '');
+        (temCv(d, ap, opcoes) ? htmlCv(d, ap, opcoes, false) : '');
     const classes = ['site', `estrutura-${ap.estrutura}`, `foto-${ap.foto}`, abas ? 'com-abas' : ''].join(' ');
 
     let corpo;
@@ -563,7 +563,7 @@
       : '';
     const partes = versoes.map(([id, dv]) => [id, I18n.com(id, () => corpoSite(dv, ap, opcoes, seletor))]);
     const abas = partes[0][1].abas;
-    const cv = temCv(d, ap) ? Cv().CSS + (abas ? CSS_IMPRIMIR_CV : '') : '';
+    const cv = temCv(d, ap, opcoes) ? Cv().CSS + (abas && ap.cv === 'sim' ? CSS_IMPRIMIR_CV : '') : '';
     // A foto entra uma vez só, como variável CSS: as versões em dois idiomas compartilham a mesma imagem.
     const foto = d.foto ? `<style id="foto">${cssFoto(d, ap)}</style>` : '';
 
@@ -655,13 +655,15 @@ ${opcoes.dadosConstrutor ? `<script type="application/json" id="dados-do-constru
 
   // Site em dois idiomas: sem JavaScript, fica o português; com ele, começa no idioma do navegador
   // do visitante e lembra a escolha do botão (no próprio navegador dele, sem enviar nada). É a única
-  // exceção ao site sem JavaScript, e só existe quando a pessoa escolhe os dois idiomas.
+  // exceção ao site sem JavaScript, e só existe quando a pessoa escolhe os dois idiomas. Ele também
+  // passa à versão em inglês o PDF próprio que só foi uma vez no arquivo (ver htmlCv).
   const CSS_IDIOMAS = `
 html[data-idioma="en"] .versao-pt{display:none}
 html:not([data-idioma="en"]) .versao-en{display:none}`;
   const SCRIPT_IDIOMAS = `<script>(function(){var h=document.documentElement,k='pagelattes-idioma',s=null;try{s=localStorage.getItem(k)}catch(e){}
 function ap(x){h.setAttribute('data-idioma',x);h.lang=x==='en'?'en':'pt-BR';var b=document.querySelectorAll('.idioma-site button');for(var i=0;i<b.length;i++)b[i].setAttribute('aria-pressed',String(b[i].getAttribute('data-idioma')===x))}
 ap(s==='en'||s==='pt'?s:(/^pt/i.test(navigator.language||'')?'pt':'en'));
+var c=document.querySelectorAll('a[data-cv-de]');for(var j=0;j<c.length;j++){var o=document.querySelector('.versao-'+c[j].getAttribute('data-cv-de')+' a.cv-baixar[download]');if(o){c[j].href=o.href;c[j].setAttribute('download',o.getAttribute('download'))}}
 document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('.idioma-site button');if(!b)return;var x=b.getAttribute('data-idioma');try{localStorage.setItem(k,x)}catch(e2){}ap(x)})})()</script>`;
 
   // A foto (uma vez só, como variável) e, se a pessoa ajustou o zoom, o tamanho da imagem dentro do quadro.
@@ -731,20 +733,41 @@ document.addEventListener('click',function(e){var b=e.target.closest&&e.target.c
       const secoes = d.secoes.filter(s => s.aba === a.id);
       if (secoes.length) abas.push({ id: a.id, nome: _(a.nome), html: secoes.map(s => secao(s, completas, d.nome)).join('') });
     }
-    if (temCv(d, ap)) abas.push({ id: 'cv', nome: _('CV'), html: htmlCv(d, opcoes, true) });
+    if (temCv(d, ap, opcoes)) abas.push({ id: 'cv', nome: _('CV'), html: htmlCv(d, ap, opcoes, true) });
     return abas.length >= 2 ? abas : null;
   }
 
-  // A aba (ou, em página única, a seção) do currículo em formato neutro, com o botão do PDF. O PDF
-  // vem pronto em opcoes.cvPdf, um por idioma (o construtor o gera antes, ver Cv.arquivo); na prévia,
-  // o botão fica sem arquivo e o construtor gera o PDF na hora do clique.
-  function temCv(d, ap) {
-    return ap.cv !== 'nao' && !!(d.secoes.length || d.bio);
+  // A aba (ou, em página única, a seção) do currículo, com o botão do PDF. O PDF gerado aqui vem
+  // pronto em opcoes.cvPdf, um por idioma (o construtor o gera antes, ver Cv.arquivo); o PDF que a
+  // pessoa enviou vem em opcoes.cvProprio ({ pt, en }: { href, paginas, bytes }). Na prévia, o botão
+  // fica sem arquivo e o construtor baixa o PDF na hora do clique.
+  // Com "Meu próprio PDF" e nenhum arquivo enviado, o site sai sem a aba (a prévia mostra o lembrete).
+  function temCv(d, ap, opcoes) {
+    if (ap.cv === 'nao') return false;
+    if (ap.cv === 'proprio') return !!(opcoes.previa || pdfsProprios(opcoes).length);
+    return !!(d.secoes.length || d.bio);
   }
 
-  function htmlCv(d, opcoes, papel) {
-    const pdf = (opcoes.cvPdf && opcoes.cvPdf[I18n.idioma()]) || null;
-    return Cv().html(Cv().modelo(d), { pdf, papel });
+  function pdfsProprios(opcoes) {
+    const p = opcoes.cvProprio || {};
+    return ['pt', 'en'].filter(id => p[id]);
+  }
+
+  function htmlCv(d, ap, opcoes, papel) {
+    const id = I18n.idioma();
+    if (ap.cv !== 'proprio') {
+      const pdf = (opcoes.cvPdf && opcoes.cvPdf[id]) || null;
+      return Cv().html(Cv().modelo(d), { pdf, papel });
+    }
+    // Um PDF só num site em dois idiomas: ele vai uma vez, na versão em português, e a versão em
+    // inglês pega o endereço emprestado (ver SCRIPT_IDIOMAS). Senão, cada versão com o seu, ou com o
+    // único que houver.
+    const proprios = opcoes.cvProprio || {};
+    const enviados = pdfsProprios(opcoes);
+    const unico = enviados.length === 1 ? proprios[enviados[0]] : null;
+    const pdf = ap.idioma === 'ambos' && unico ? unico : proprios[id] || proprios.pt || proprios.en || null;
+    const emprestado = ap.idioma === 'ambos' && unico && id === 'en' && unico.href ? 'pt' : '';
+    return Cv().html(Cv().modelo(d), { pdf, proprio: true, emprestado, previa: !!opcoes.previa });
   }
 
   // As abas funcionam só com CSS (:target), sem JavaScript: cada aba tem um endereço

@@ -121,6 +121,7 @@ O site sai também com uma aba **CV**: o mesmo conteúdo, num currículo em form
 - **O conteúdo é o do site**: só o que você manteve, com as suas edições. As produções aparecem com a referência completa, e o seu nome em negrito. Mudou algo? Baixe o `index.html` de novo e o PDF vem junto, atualizado.
 - **Em inglês, sai em inglês.** No site em dois idiomas há um CV para cada um, com os rótulos e os campos "Em inglês" que você preencheu, pela mesma regra do resto do site.
 - **Para ter o PDF à mão**, para mandar por e-mail, use o botão da etapa Publicar ou o da aba CV na Revisão.
+- **Já tem o seu?** Escolha "Meu próprio PDF" na Aparência e envie o arquivo (até 5 MB). A aba CV passa a oferecer esse PDF, como ele está. No site em dois idiomas dá para enviar um para cada versão, e um só vale para as duas. O PDF fica guardado neste navegador e vai dentro do `index.html`, então volta também quando você reabre o site pela etapa Atualizar. Ele fica público: confira antes se não traz telefone, endereço ou documento.
 - **Não quer?** Escolha "Sem o CV" na Aparência ou na Revisão.
 
 ## Seus dados ficam com você

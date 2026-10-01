@@ -252,6 +252,17 @@ input:focus, textarea:focus, button:focus-visible, label:focus-within {
   outline: 2px solid var(--foco); outline-offset: 2px;
 }
 .opcao-cor:focus-within { outline: none; }
+
+/* o PDF próprio, abaixo das opções do CV */
+.cv-proprio { margin-top: .75rem; }
+.cv-arquivo { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .8rem; margin: .6rem 0; font-size: .9rem; }
+.cv-arquivo-idioma { flex-basis: 100%; font-size: .85rem; font-weight: 600; }
+.cv-arquivo-nome { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
+.cv-arquivo-nome small { color: var(--suave); }
+.cv-arquivo label { position: relative; cursor: pointer; }
+.cv-proprio .erro { margin: .5rem 0; }
+.aviso-cv { padding: .6rem .8rem; border-radius: var(--raio); background: var(--erro-fundo); color: var(--erro); font-size: .92rem; }
+
 .opcao-cor:has(input:focus-visible) .bolinha { outline: 2px solid var(--foco); outline-offset: 5px; }
 
 .previa { position: sticky; top: 1rem; min-width: 0; }
